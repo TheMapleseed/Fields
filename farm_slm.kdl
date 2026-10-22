@@ -1,0 +1,46 @@
+// FarmSLM architecture.
+// The context window is 500000 tokens. The model reads that window in segments
+// and carries memory_slots forward at each layer. Weights are safetensors.
+model {
+  vocab_size 512
+  hidden_size 512
+  intermediate_size 1536
+  num_hidden_layers 8
+  num_attention_heads 8
+  num_key_value_heads 2
+  max_position_embeddings 500000
+  segment_length 2048
+  memory_slots 256
+  rope_theta 1000000.0
+  rms_norm_eps 1e-6
+}
+
+domains {
+  domain "english"
+  domain "agricultural_linguistics"
+  domain "chemistry"
+  domain "weather_reading"
+  domain "physics"
+}
+
+collection {
+  max_repos_per_query 10
+  max_files_per_repo 40
+  max_file_bytes 1000000
+  max_total_bytes 20000000
+  max_queries_per_domain 32
+}
+
+train {
+  learning_rate 0.0003
+  steps 5
+  weight_decay 0.01
+  grad_clip 1.0
+  seed 42
+  max_train_tokens 8192
+}
+
+weights {
+  format "safetensors"
+  path "artifacts/farm_slm.safetensors"
+}
