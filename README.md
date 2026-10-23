@@ -24,6 +24,8 @@ It is aimed at five kinds of language:
 
 A georeferenced map chip can sit in front of those words. The chip is cut from a GeoTIFF that still has its coordinate system, split into 16-pixel patches, and passed to a vision encoder. The largest chip is 256 pixels on a side, with 3 channels. A labeled coordinate is plotted from that file's transform, so the point lands on the right pixel. A screenshot has no coordinate system and is rejected. Foliage sheets are NAIP. Topographic sheets are USGS maps.
 
+Soil loss on a slope is calculated with the Revised Universal Soil Loss Equation. The result is tons per acre per year from rainfall, the soil, the slope, the cover, and the support practice. The same calculation searches the cover and support list in `farm_slm.kdl` and keeps the pair with the lowest soil loss. Contouring is used only inside the slope and length limits of that table. Local rainfall and soil numbers still have to be supplied. A training record names the place and the unit system, SI or US customary, and the text repeats both. The vocabulary does not add a token per country. The byte tokenizer already reads a local language. Sources for regional rainfall erosivity, soil maps, crop calendars, and conservation practices are listed in `sources.kdl`. SoilGrids and iSDAsoil are regional maps, not a soil test of one field. This is a planning equation, and the language-model weights have not been trained on it.
+
 Training uses the accelerator on the machine: NVIDIA CUDA, then AMD ROCm, then a DirectML adapter when that package is installed, then Apple Metal, then the CPU.
 
 ## Weights
@@ -39,6 +41,7 @@ The practice file from the short sample run is float32. `artifacts/` and `*.safe
 - The model, the byte tokenizer, and the five domain tokens are configured in `farm_slm.kdl`.
 - The vision encoder reads a map chip during the forward pass.
 - Map chips are cut from georeferenced sheets, and the labeled pixel is checked against the sheet's coordinate system.
+- Soil loss is calculated with RUSLE, and the cover and support pair with the lowest loss is selected from `farm_slm.kdl`.
 - `sources.kdl` lists the public catalogs intended for later collection. Each record keeps the license stated by the publisher.
 - The GitHub collector can save text as JSONL under `data/corpus/` once it is given queries.
 - A training run writes the safetensors file above.

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -152,6 +153,95 @@ def load_map_settings(path: Path | None = None) -> MapSettings:
     return MapSettings(chip_size=_as_int(_number(maps, "chip_size")))
 
 
+@dataclass(frozen=True)
+class CoverPractice:
+    name: str
+    factor: float
+
+
+@dataclass(frozen=True)
+class SupportBand:
+    low_percent: float
+    high_percent: float
+    factor: float
+    max_length_meters: float
+
+
+@dataclass(frozen=True)
+class SupportPractice:
+    name: str
+    bands: tuple[SupportBand, ...]
+
+
+@dataclass(frozen=True)
+class ErosionSettings:
+    tolerance_tons_per_acre_year: float
+    covers: tuple[CoverPractice, ...]
+    supports: tuple[SupportPractice, ...]
+
+    def __post_init__(self) -> None:
+        if self.tolerance_tons_per_acre_year <= 0:
+            raise ValueError("erosion tolerance must be positive")
+        if not self.covers or not self.supports:
+            raise ValueError("erosion needs at least one cover and one support practice")
+        _unique("cover", tuple(item.name for item in self.covers))
+        _unique("support", tuple(item.name for item in self.supports))
+        for cover in self.covers:
+            _unit_factor(cover.name, cover.factor)
+        for support in self.supports:
+            if not support.bands:
+                raise ValueError(f"{support.name} needs a slope band")
+            ordered = tuple(sorted(support.bands, key=lambda band: band.low_percent))
+            previous = -1.0
+            for band in ordered:
+                if band.low_percent > band.high_percent:
+                    raise ValueError(f"{support.name} has a reversed slope band")
+                if band.low_percent <= previous:
+                    raise ValueError(f"{support.name} has overlapping slope bands")
+                previous = band.high_percent
+                _unit_factor(support.name, band.factor)
+                if band.max_length_meters < 0:
+                    raise ValueError(f"{support.name} has a negative slope-length limit")
+
+
+def load_erosion_settings(path: Path | None = None) -> ErosionSettings:
+    nodes = _read_nodes(path)
+    erosion = _one(nodes, "erosion")
+    covers: list[CoverPractice] = []
+    supports: list[SupportPractice] = []
+    for child in erosion.children:
+        if child.name == "cover":
+            if (
+                len(child.args) != 2
+                or not isinstance(child.args[0], str)
+                or not child.args[0]
+                or not isinstance(child.args[1], (int, float))
+            ):
+                raise ValueError("a cover practice needs a name and a factor")
+            covers.append(CoverPractice(name=child.args[0], factor=float(child.args[1])))
+        elif child.name == "support":
+            bands: list[SupportBand] = []
+            for band in child.children:
+                if band.name != "band":
+                    continue
+                if len(band.args) != 4 or not all(isinstance(arg, (int, float)) for arg in band.args):
+                    raise ValueError("a support band needs four numbers")
+                bands.append(
+                    SupportBand(
+                        low_percent=float(band.args[0]),
+                        high_percent=float(band.args[1]),
+                        factor=float(band.args[2]),
+                        max_length_meters=float(band.args[3]),
+                    )
+                )
+            supports.append(SupportPractice(name=_string_arg(child), bands=tuple(bands)))
+    return ErosionSettings(
+        tolerance_tons_per_acre_year=float(_number(erosion, "tolerance")),
+        covers=tuple(covers),
+        supports=tuple(supports),
+    )
+
+
 def _read_nodes(path: Path | None) -> tuple[Node, ...]:
     config_path = project_root() / "farm_slm.kdl" if path is None else path
     try:
@@ -251,3 +341,13 @@ def _as_int(value: int | float) -> int:
 def _positive(name: str, value: int) -> None:
     if value <= 0:
         raise ValueError(f"{name} must be positive")
+
+
+def _unique(kind: str, names: tuple[str, ...]) -> None:
+    if len(names) != len(set(names)):
+        raise ValueError(f"each {kind} practice needs its own name")
+
+
+def _unit_factor(name: str, factor: float) -> None:
+    if not math.isfinite(factor) or factor <= 0 or factor > 1:
+        raise ValueError(f"{name} factor must be greater than 0 and at most 1")

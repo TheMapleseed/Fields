@@ -9,6 +9,7 @@ import torch
 
 from farm_slm.config import ProjectConfig, load_project, project_root
 from farm_slm.device import detect_accelerator
+from farm_slm.locality import condition_text
 from farm_slm.model import FarmSLM
 from farm_slm.tokenizer import Tokenizer
 
@@ -105,7 +106,11 @@ def _load_corpus(root: Path, domains: tuple[str, ...]) -> list[tuple[str, str]]:
             text = row.get("text")
             if domain not in allowed or not isinstance(text, str) or not text.strip():
                 continue
-            documents.append((str(domain), text))
+            region = row.get("region", "unspecified")
+            units = row.get("units", "unspecified")
+            if not isinstance(region, str) or not isinstance(units, str):
+                continue
+            documents.append((str(domain), condition_text(text, region, units)))
     return documents
 
 

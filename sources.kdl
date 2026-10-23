@@ -2,6 +2,7 @@
 // Map chips are georeferenced GeoTIFFs. The vision encoder reads those chips.
 // A screenshot has no coordinate system and cannot be plotted.
 // Licenses below are what the publisher pages state. Keep the license with every record.
+// A training record names its place and its unit system. The vocabulary does not grow a token per country.
 
 source "openstax" {
   title "OpenStax"
@@ -422,11 +423,104 @@ source "usgs-topo" {
   }
 }
 
+source "rusle" {
+  title "Revised Universal Soil Loss Equation"
+  publisher "USDA Agricultural Research Service"
+  home "https://www.ars.usda.gov/"
+  kind "soil"
+  note "Sheet and rill soil loss is A = R K L S C P, in tons per acre per year, from Agriculture Handbook 703. Support-practice numbers used here are the contour tables republished by Agriculture and Agri-Food Canada. US federal work is public domain. The Canadian manual is a government publication; keep its credit with any table copied from it."
+  item {
+    title "RUSLEFAC support-practice tables"
+    domain "soil"
+    url "https://sis.agr.gc.ca/cansis/publications/manuals/2002-92/rusle-can.pdf"
+    covers "contour and contour-strip P factors by slope class, and example cover factors"
+    license "government-publication"
+  }
+}
+
+source "locale" {
+  title "Localized rainfall, soil, and practice records"
+  publisher "several"
+  home "https://www.fao.org/"
+  kind "soil"
+  note "The slope equation is shared. R, K, cover, and support practices are not. Train on the place named in the record, in the unit system named in the record. SoilGrids and iSDAsoil are regional maps, not a soil test of one field. GloREDa stations cover 65 countries, so a missing district needs local rainfall rather than a copied R. The US contour table is not a Kenya or Java practice table."
+  item {
+    title "Global Rainfall Erosivity database"
+    domain "weather_reading"
+    url "https://doi.org/10.5281/zenodo.8036998"
+    covers "annual and monthly rainfall erosivity R for stations in 65 countries, and 1 km monthly maps"
+    license "CC-BY-4.0"
+  }
+  item {
+    title "ESDAC GloREDa download terms"
+    domain "weather_reading"
+    url "https://esdac.jrc.ec.europa.eu/content/gloreda"
+    covers "the same erosivity database when taken from ESDAC, which forbids passing those files to a third party"
+    license "esdac-no-redistribution"
+  }
+  item {
+    title "SoilGrids"
+    domain "soil"
+    url "https://isric.org/explore/soilgrids/"
+    covers "global sand, silt, clay, organic carbon, and related properties at 250 meters, used to estimate K"
+    license "CC-BY-4.0"
+  }
+  item {
+    title "iSDAsoil"
+    domain "soil"
+    url "https://www.isda-africa.com/isdasoil/"
+    covers "Africa soil properties at 30 meters, including texture and organic carbon for a local K"
+    license "CC-BY-4.0"
+  }
+  item {
+    title "Harmonized World Soil Database v2.0"
+    domain "soil"
+    url "https://www.fao.org/soils-portal/data-hub/soil-maps-and-databases/harmonized-world-soil-database-v20/en/"
+    covers "global soil inventory at 1 km, including texture for regions SoilGrids does not replace"
+    license "CC-BY-NC-SA-3.0-IGO"
+  }
+  item {
+    title "CHIRPS rainfall"
+    domain "weather_reading"
+    url "https://www.chc.ucsb.edu/data/chirps"
+    covers "quasi-global daily rainfall from 1981, a substitute where no erosivity station exists"
+    license "citation-required"
+  }
+  item {
+    title "ERA5 reanalysis"
+    domain "weather_reading"
+    url "https://cds.climate.copernicus.eu/datasets/reanalysis-era5-single-levels"
+    covers "global hourly weather for a local climate description around a field"
+    license "Copernicus"
+  }
+  item {
+    title "FAO crop calendar"
+    domain "agricultural_linguistics"
+    url "https://cropcalendar.apps.fao.org/"
+    covers "planting and harvest months by country and crop, including Africa and Asia"
+    license "see-page"
+  }
+  item {
+    title "CGSpace"
+    domain "agriculture"
+    url "https://cgspace.cgiar.org/"
+    covers "CGIAR papers and manuals on local crops, soils, and conservation"
+    license "per-record"
+  }
+  item {
+    title "WOCAT Global SLM Database"
+    domain "agriculture"
+    url "https://wocat.net/en/database/"
+    covers "field-tested conservation practices from more than 100 countries"
+    license "see-terms"
+  }
+}
+
 format "text" {
   status "current"
   encoding "GeoJSON or WKT plus prose"
-  fields "instruction, input, output"
-  note "Ask a farm question about a contour, soil, or parcel written as coordinates and properties. The answer states the risk or reading in sentences."
+  fields "instruction, input, output, region, units, license"
+  note "Ask a farm question about a contour, soil, or parcel written as coordinates and properties. The answer states the risk or reading in sentences. region is a lowercase place or ISO country code. units is us-customary or si. Unspecified is allowed only when the source has no place. Hold out a whole region when scoring, so a good score is not one country memorized."
 }
 
 format "vision" {

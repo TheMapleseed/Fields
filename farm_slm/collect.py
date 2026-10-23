@@ -74,7 +74,7 @@ def collection_section(plan: Mapping[str, Sequence[str]] | None = None) -> str:
             rendered = "(no queries yet)"
         lines.append(f"{domain}: {rendered}")
     lines.append(
-        "record fields: domain, text, repo, path, sha, license, source_url"
+        "record fields: domain, text, region, units, repo, path, sha, license, source_url"
     )
     lines.append("Add queries to the plan, then call collect_github(plan).")
     return "\n".join(lines)
@@ -371,6 +371,8 @@ def _collect_repo(
                 "sha": sha,
                 "license": license_id,
                 "source_url": _source_url(source_root, branch, path),
+                "region": "unspecified",
+                "units": "unspecified",
                 "text": text,
             }
         )
