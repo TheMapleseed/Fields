@@ -1,0 +1,369 @@
+// Source catalog for Fields. Collection code does not read this file yet.
+// The model is text-only. Map sources are listed so their features can be
+// written as GeoJSON or Well-Known Text plus a prose description.
+// Licenses below are what the publisher pages state. Keep the license with every record.
+
+source "openstax" {
+  title "OpenStax"
+  publisher "Rice University"
+  home "https://openstax.org"
+  kind "textbooks"
+  note "Read the license on each book page. The books are not all CC BY."
+  item {
+    title "Writing Guide with Handbook"
+    domain "english"
+    url "https://openstax.org/details/books/writing-guide"
+    covers "grammar, structure, and synthesis"
+    license "see-book-page"
+  }
+  item {
+    title "Algebra and Trigonometry 2e"
+    domain "mathematics"
+    url "https://openstax.org/details/books/algebra-and-trigonometry-2e"
+    covers "algebra and trigonometry"
+    license "see-book-page"
+  }
+  item {
+    title "Precalculus 2e"
+    domain "mathematics"
+    url "https://openstax.org/details/books/precalculus-2e"
+    covers "functions, trigonometry, and an introduction to calculus"
+    license "see-book-page"
+  }
+  item {
+    title "Calculus Volume 1"
+    domain "mathematics"
+    url "https://openstax.org/details/books/calculus-volume-1"
+    covers "functions, limits, derivatives, and integration"
+    license "CC-BY-NC-SA-4.0"
+  }
+  item {
+    title "Calculus Volume 2"
+    domain "mathematics"
+    url "https://openstax.org/details/books/calculus-volume-2"
+    covers "integration techniques, sequences, and series"
+    license "see-book-page"
+  }
+  item {
+    title "Calculus Volume 3"
+    domain "mathematics"
+    url "https://openstax.org/details/books/calculus-volume-3"
+    covers "multivariable and vector calculus"
+    license "see-book-page"
+  }
+  item {
+    title "Biology 2e"
+    domain "biology"
+    url "https://openstax.org/details/books/biology-2e"
+    covers "cell biology, plant physiology, and genetics"
+    license "see-book-page"
+  }
+  item {
+    title "Chemistry 2e"
+    domain "chemistry"
+    url "https://openstax.org/details/books/chemistry-2e"
+    covers "general chemistry, including soil-chemistry fundamentals"
+    license "see-book-page"
+  }
+  item {
+    title "Organic Chemistry: A Tenth Edition"
+    domain "chemistry"
+    url "https://openstax.org/details/books/organic-chemistry"
+    covers "organic chemistry and biochemistry foundations"
+    license "see-book-page"
+  }
+  item {
+    title "College Physics 2e"
+    domain "physics"
+    url "https://openstax.org/details/books/college-physics-2e"
+    covers "fluids, heat, and light, which are the physics used in irrigation and weather"
+    license "see-book-page"
+  }
+}
+
+source "mit-ocw" {
+  title "MIT OpenCourseWare"
+  publisher "Massachusetts Institute of Technology"
+  home "https://ocw.mit.edu"
+  kind "lecture-notes"
+  note "18.901 is the topology course. 18.101 is Analysis and Manifolds, not a topology course. Confirm the license on the course page."
+  item {
+    title "18.901 Introduction to Topology"
+    domain "topology"
+    url "https://ocw.mit.edu/courses/18-901-introduction-to-topology-fall-2004/"
+    covers "topological spaces, continuous functions, connectedness, and compactness"
+    license "see-course-page"
+  }
+}
+
+source "usda-nal" {
+  title "USDA National Agricultural Library"
+  publisher "United States Department of Agriculture"
+  home "https://www.nal.usda.gov/services/public-access"
+  kind "agriculture"
+  note "US federal works are public domain. PubAg articles and Ag Data Commons datasets keep the license printed on each record."
+  item {
+    title "PubAg"
+    domain "agriculture"
+    url "https://pubag.nal.usda.gov/"
+    covers "crop science, pest management, and plant nutrition"
+    license "per-record"
+  }
+  item {
+    title "Ag Data Commons"
+    domain "agriculture"
+    url "https://data.nal.usda.gov/"
+    covers "catalog records and datasets from USDA-funded research"
+    license "per-record"
+  }
+  item {
+    title "NAL Agricultural Thesaurus"
+    domain "agricultural_linguistics"
+    url "https://lod.nal.usda.gov/en/"
+    covers "farm concepts, common names, and the names of agricultural organisms"
+    license "public-domain"
+  }
+}
+
+source "fao" {
+  title "Food and Agriculture Organization of the United Nations"
+  publisher "FAO"
+  home "https://www.fao.org"
+  kind "manuals-and-maps"
+  note "Irrigation, soil classification, fertilizer, and botany manuals are filed in the FAO document collection. Keep each document license."
+  item {
+    title "FAO documents"
+    domain "agriculture"
+    url "https://www.fao.org/documents"
+    covers "technical manuals on irrigation, soils, fertilizer, and botany"
+    license "per-document"
+  }
+  item {
+    title "FAO Agro-Informatic Data Catalog"
+    domain "spatial"
+    url "https://www.fao.org/geospatial/data-and-tools/data-portals/fao-agro-informatic-data-catalog/en"
+    covers "FAO spatial databases, formerly the GeoNetwork map catalog"
+    license "per-dataset"
+  }
+  item {
+    title "Global Agro-Ecological Zones v5"
+    domain "spatial"
+    url "https://data.apps.fao.org/catalog/dataset/gaez-v5-master-config"
+    covers "agro-climate zones, soil suitability, and yield potential"
+    license "per-dataset"
+  }
+  item {
+    title "AGROVOC"
+    domain "agricultural_linguistics"
+    url "https://www.fao.org/agrovoc/"
+    covers "agricultural terms, definitions, and relations, in English and other languages"
+    license "see-fao-terms"
+  }
+}
+
+source "gbif" {
+  title "Global Biodiversity Information Facility"
+  publisher "GBIF"
+  home "https://www.gbif.org/"
+  kind "botany"
+  note "Occurrence records carry the license chosen by the publisher. Many are CC0 or CC BY. Some are not."
+  item {
+    title "GBIF occurrence and species records"
+    domain "botany"
+    url "https://www.gbif.org/"
+    covers "plant distribution records and taxonomic names"
+    license "per-record"
+  }
+}
+
+source "powo" {
+  title "Plants of the World Online"
+  publisher "Royal Botanic Gardens, Kew"
+  home "https://powo.science.kew.org/"
+  kind "botany"
+  note "Taxonomy, descriptions, distribution, and uses. Kew's terms apply. The names backbone is shared with GBIF."
+  item {
+    title "Plants of the World Online"
+    domain "botany"
+    url "https://powo.science.kew.org/"
+    covers "accepted plant names, descriptions, and distribution"
+    license "see-kew-terms"
+  }
+}
+
+source "opentopography" {
+  title "OpenTopography"
+  publisher "OpenTopography"
+  home "https://www.opentopography.org/start"
+  kind "elevation"
+  note "High-resolution lidar and digital elevation models. Some collections, including USGS 3DEP through this site, are limited to US academic use. The same federal data is public elsewhere."
+  item {
+    title "OpenTopography data catalog"
+    domain "spatial"
+    url "https://portal.opentopography.org/dataCatalog"
+    covers "elevation, slope, and terrain"
+    license "per-dataset"
+  }
+}
+
+source "usgs-3dep" {
+  title "USGS 3D Elevation Program"
+  publisher "United States Geological Survey"
+  home "https://www.usgs.gov/3d-elevation-program"
+  kind "elevation"
+  note "US federal elevation, contours, and hydrography. Public domain. Pair a vector feature with a written land description."
+  item {
+    title "3DEP and the National Map"
+    domain "spatial"
+    url "https://www.usgs.gov/3d-elevation-program"
+    covers "elevation, contours, and hydrography"
+    license "public-domain"
+  }
+  item {
+    title "USGS lidar on AWS Open Data"
+    domain "spatial"
+    url "https://registry.opendata.aws/usgs-lidar/"
+    covers "public 3DEP lidar outside the OpenTopography academic limit"
+    license "public-domain"
+  }
+}
+
+source "ssurgo" {
+  title "Soil Survey Geographic Database"
+  publisher "USDA Natural Resources Conservation Service"
+  home "https://www.nrcs.usda.gov/resources/data-and-reports/soil-survey-geographic-database-ssurgo"
+  kind "soil"
+  note "Soil map units linked to chemistry and physical properties such as pH, organic matter, and available water. US federal work."
+  item {
+    title "SSURGO"
+    domain "soil"
+    url "https://www.nrcs.usda.gov/resources/data-and-reports/soil-survey-geographic-database-ssurgo"
+    covers "soil map units and laboratory properties"
+    license "public-domain"
+  }
+  item {
+    title "Soil Taxonomy"
+    domain "soil"
+    url "https://www.nrcs.usda.gov/resources/guides-and-instructions/soil-taxonomy"
+    covers "soil names, the twelve soil orders, and the soil-survey glossary"
+    license "public-domain"
+  }
+}
+
+source "satellite" {
+  title "Landsat and Sentinel-2"
+  publisher "USGS, NASA, and ESA"
+  home "https://planetarycomputer.microsoft.com/catalog"
+  kind "imagery"
+  note "Imagery is for a later vision model. This text model does not train on the tiles. Landsat is US public domain. Sentinel-2 is Copernicus open data."
+  item {
+    title "Planetary Computer data catalog"
+    domain "spatial"
+    url "https://planetarycomputer.microsoft.com/catalog"
+    covers "Landsat collection and Harmonized Landsat Sentinel-2"
+    license "per-dataset"
+  }
+}
+
+source "nws" {
+  title "National Weather Service text"
+  publisher "National Oceanic and Atmospheric Administration"
+  home "https://www.weather.gov/"
+  kind "weather"
+  note "Area forecast discussions and other NWS products are the prose a reader uses to interpret a forecast. US federal text. The Iowa Environmental Mesonet keeps a searchable copy."
+  item {
+    title "NWS text products via the Iowa Environmental Mesonet"
+    domain "weather_reading"
+    url "https://mesonet.agron.iastate.edu/geojson/nwstext.py?help="
+    covers "area forecast discussions and other forecast text, with the issuing office as a point"
+    license "public-domain"
+  }
+}
+
+source "nass" {
+  title "National Agricultural Statistics Service"
+  publisher "United States Department of Agriculture"
+  home "https://www.nass.usda.gov/Publications/National_Crop_Progress/index.php"
+  kind "crop-weather"
+  note "Weekly crop-progress notes and the Weekly Weather and Crop Bulletin say how weather and fieldwork fit together. US federal work."
+  item {
+    title "Crop Progress and the Weekly Weather and Crop Bulletin"
+    domain "weather_reading"
+    url "https://www.nass.usda.gov/Publications/National_Crop_Progress/index.php"
+    covers "crop condition, soil moisture, and days suitable for fieldwork"
+    license "public-domain"
+  }
+}
+
+source "plants" {
+  title "USDA PLANTS Database"
+  publisher "United States Department of Agriculture"
+  home "https://plants.usda.gov/"
+  kind "botany"
+  note "Common names, scientific names, and distribution for plants in the United States. This is the farm vocabulary for crops and weeds."
+  item {
+    title "PLANTS Database"
+    domain "agricultural_linguistics"
+    url "https://plants.usda.gov/"
+    covers "common names, scientific names, and where a plant grows"
+    license "public-domain"
+  }
+}
+
+source "plain-language" {
+  title "Plain Language guidelines"
+  publisher "United States government"
+  home "https://www.plainlanguage.gov/"
+  kind "english"
+  note "Federal guidance for short, direct English. US government work."
+  item {
+    title "plainlanguage.gov"
+    domain "english"
+    url "https://www.plainlanguage.gov/"
+    covers "short sentences and defined technical words"
+    license "public-domain"
+  }
+}
+
+source "geojson" {
+  title "GeoJSON"
+  publisher "Internet Engineering Task Force"
+  home "https://geojson.org/"
+  kind "map-syntax"
+  note "The text encoding this model uses for a map feature. RFC 7946 is the specification."
+  item {
+    title "RFC 7946 The GeoJSON Format"
+    domain "spatial"
+    url "https://datatracker.ietf.org/doc/html/rfc7946"
+    covers "points, lines, and polygons written as text"
+    license "see-rfc"
+  }
+}
+
+source "nhd" {
+  title "National Hydrography Dataset"
+  publisher "United States Geological Survey"
+  home "https://www.usgs.gov/national-hydrography/national-hydrography-dataset"
+  kind "water"
+  note "Streams, rivers, and watershed boundaries as vectors. Pair each feature with a written description. US federal work."
+  item {
+    title "National Hydrography Dataset"
+    domain "spatial"
+    url "https://www.usgs.gov/national-hydrography/national-hydrography-dataset"
+    covers "streams and watersheds"
+    license "public-domain"
+  }
+}
+
+format "text" {
+  status "current"
+  encoding "GeoJSON or WKT plus prose"
+  fields "instruction, input, output"
+  note "Ask a farm question about a contour, soil, or parcel written as coordinates and properties. The answer states the risk or reading in sentences."
+}
+
+format "vision" {
+  status "later"
+  encoding "map tile plus a written reading"
+  note "Needs a vision adapter this model does not have. Do not download satellite tiles or rasters for the current corpus."
+}
