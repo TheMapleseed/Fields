@@ -8,6 +8,7 @@ from pathlib import Path
 import torch
 
 from farm_slm.config import ProjectConfig, load_project, project_root
+from farm_slm.device import detect_accelerator
 from farm_slm.model import FarmSLM
 from farm_slm.tokenizer import Tokenizer
 
@@ -38,8 +39,11 @@ _PRIMERS: dict[str, str] = {
 def run_training(root: Path | None = None) -> Path:
     base = project_root() if root is None else root
     project = load_project(base / "farm_slm.kdl")
+    accelerator = detect_accelerator()
     torch.manual_seed(project.train.seed)
-    model = FarmSLM(project.model)
+    if accelerator.device.type == "cuda":
+        torch.cuda.manual_seed_all(project.train.seed)
+    model = FarmSLM(project.model).to(accelerator.device)
     tokenizer = Tokenizer(project.model)
     documents = _load_corpus(base, project.model.domains)
     source = "corpus" if documents else "primer"
@@ -51,10 +55,11 @@ def run_training(root: Path | None = None) -> Path:
     token_ids = _fit_token_budget(documents, tokenizer, project.train.max_train_tokens)
     if len(token_ids) < 2:
         raise ValueError("not enough tokens to train")
-    batch = torch.tensor([token_ids], dtype=torch.long)
+    batch = torch.tensor([token_ids], dtype=torch.long, device=accelerator.device)
     losses = _optimize(model, batch, project)
     destination = base / project.weights_path
     model.save_safetensors(destination)
+    print(f"device={accelerator.label()}")
     print(f"source={source}")
     for index, loss in enumerate(losses, start=1):
         print(f"step={index} loss={loss:.4f}")
