@@ -12,7 +12,9 @@ import math
 import re
 from pathlib import Path
 
+import numpy as np
 import rasterio
+import torch
 from rasterio.warp import transform
 from rasterio.windows import Window
 
@@ -125,6 +127,20 @@ def append_example(record: dict[str, object], records_path: Path) -> None:
         handle.write(line + "\n")
 
 
+def read_chip(path: Path) -> torch.Tensor:
+    """Return a chip as float tensor [3, height, width] in the range 0 to 1."""
+    with rasterio.open(path) as source:
+        samples = source.read()
+    values = _unit_interval(samples)
+    if values.shape[0] == 1:
+        values = np.repeat(values, 3, axis=0)
+    elif values.shape[0] == 2:
+        values = np.concatenate([values, values[:1]], axis=0)
+    elif values.shape[0] > 3:
+        values = values[:3]
+    return torch.from_numpy(np.ascontiguousarray(values))
+
+
 def _locate(source: rasterio.DatasetReader, longitude: float, latitude: float) -> dict[str, object]:
     if source.crs is None or source.transform.is_identity:
         raise MapSheetError(
@@ -177,3 +193,17 @@ def _validate_wgs84(longitude: float, latitude: float) -> None:
 def _chip_name(sheet: Path, column: int, row: int) -> str:
     stem = _STEM.sub("-", sheet.stem).strip(".-") or "sheet"
     return f"{stem}_{column}_{row}.tif"
+
+
+def _unit_interval(samples: np.ndarray) -> np.ndarray:
+    values = samples.astype(np.float32)
+    peak = float(np.max(values)) if values.size else 0.0
+    if peak <= 1.5:
+        return np.clip(values, 0.0, 1.0)
+    if peak <= 255.0:
+        return values / 255.0
+    low = float(np.min(values))
+    span = peak - low
+    if span == 0.0:
+        return np.zeros_like(values)
+    return (values - low) / span

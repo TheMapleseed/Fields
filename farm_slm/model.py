@@ -183,6 +183,51 @@ class Block(nn.Module):
         return hidden, updated
 
 
+class PatchEncoder(nn.Module):
+    """Turn a map chip into a grid of tokens the decoder can read."""
+
+    def __init__(self, config: FarmSLMConfig) -> None:
+        super().__init__()
+        self.channels = config.image_channels
+        self.patch_size = config.patch_size
+        self.image_size = config.image_size
+        grid = config.image_size // config.patch_size
+        self.proj = nn.Conv2d(
+            config.image_channels,
+            config.hidden_size,
+            kernel_size=config.patch_size,
+            stride=config.patch_size,
+            bias=False,
+        )
+        self.row_embed = nn.Parameter(torch.empty(grid, config.hidden_size))
+        self.col_embed = nn.Parameter(torch.empty(grid, config.hidden_size))
+        self.norm = RMSNorm(config.hidden_size, config.rms_norm_eps)
+
+    def forward(self, images: torch.Tensor) -> torch.Tensor:
+        if images.ndim != 4:
+            raise ValueError("images must have shape [batch, channels, height, width]")
+        batch, channels, height, width = images.shape
+        if channels != self.channels:
+            raise ValueError(f"images must have {self.channels} channels")
+        if height == 0 or width == 0 or height % self.patch_size or width % self.patch_size:
+            raise ValueError("image height and width must be divisible by the patch size")
+        if height > self.image_size or width > self.image_size:
+            raise ValueError("image is larger than the configured chip")
+        working = images if images.is_floating_point() else images.float()
+        if not torch.isfinite(working).all():
+            raise ValueError("image contains a non-finite value")
+        peak = working.detach().amax()
+        if float(peak) > 1.5:
+            working = working / 255.0
+        projected = self.proj(working)
+        patch_rows, patch_cols = projected.shape[-2:]
+        tokens = projected.flatten(2).transpose(1, 2)
+        rows = self.row_embed[:patch_rows].unsqueeze(1).expand(patch_rows, patch_cols, -1)
+        cols = self.col_embed[:patch_cols].unsqueeze(0).expand(patch_rows, patch_cols, -1)
+        positions = (rows + cols).reshape(1, patch_rows * patch_cols, -1)
+        return self.norm(tokens + positions)
+
+
 class FarmSLM(nn.Module):
     def __init__(self, config: FarmSLMConfig) -> None:
         super().__init__()
@@ -194,6 +239,7 @@ class FarmSLM(nn.Module):
         self.memory_init = nn.Parameter(
             torch.empty(config.num_hidden_layers, config.memory_slots, config.hidden_size)
         )
+        self.vision = PatchEncoder(config)
         self.lm_head.weight = self.embed.weight
         self.reset_parameters()
 
@@ -203,12 +249,19 @@ class FarmSLM(nn.Module):
                 nn.init.normal_(module.weight, mean=0.0, std=0.02)
             elif isinstance(module, nn.Embedding):
                 nn.init.normal_(module.weight, mean=0.0, std=0.02)
+            elif isinstance(module, nn.Conv2d):
+                nn.init.normal_(module.weight, mean=0.0, std=0.02)
+                if module.bias is not None:
+                    nn.init.zeros_(module.bias)
         nn.init.normal_(self.memory_init, mean=0.0, std=0.02)
+        nn.init.normal_(self.vision.row_embed, mean=0.0, std=0.02)
+        nn.init.normal_(self.vision.col_embed, mean=0.0, std=0.02)
 
     def forward(
         self,
         input_ids: torch.Tensor,
         labels: torch.Tensor | None = None,
+        images: torch.Tensor | None = None,
     ) -> torch.Tensor:
         if input_ids.ndim != 2:
             raise ValueError("input_ids must have shape [batch, time]")
@@ -224,7 +277,32 @@ class FarmSLM(nn.Module):
         if labels is not None and length < 2:
             raise ValueError("next-token loss needs at least two tokens")
 
-        hidden_states = self.embed(input_ids)
+        text = self.embed(input_ids)
+        visual_length = 0
+        if images is None:
+            hidden_states = text
+        else:
+            if images.ndim != 4 or images.shape[0] != batch:
+                raise ValueError("images must have shape [batch, channels, height, width]")
+            visual = self.vision(images.to(device=input_ids.device))
+            visual_length = visual.shape[1]
+            hidden_states = torch.cat((visual, text), dim=1)
+        length = hidden_states.shape[1]
+        if length > self.config.max_position_embeddings:
+            raise ValueError(
+                f"context length {length} exceeds {self.config.max_position_embeddings}"
+            )
+        token_targets = input_ids if labels is None else labels
+        if visual_length == 0:
+            targets = token_targets
+        else:
+            ignored = torch.full(
+                (batch, visual_length),
+                -100,
+                dtype=token_targets.dtype,
+                device=token_targets.device,
+            )
+            targets = torch.cat((ignored, token_targets), dim=1)
         memories = [
             self.memory_init[layer].unsqueeze(0).expand(batch, -1, -1).clone()
             for layer in range(len(self.blocks))
@@ -233,7 +311,6 @@ class FarmSLM(nn.Module):
         weights: list[torch.Tensor] = []
         logit_chunks: list[torch.Tensor] = []
         segment = self.config.segment_length
-        targets = input_ids if labels is None else labels
 
         for start in range(0, length, segment):
             end = min(start + segment, length)
@@ -254,6 +331,9 @@ class FarmSLM(nn.Module):
                 prediction = logits[:, : target.shape[1], :]
             if target.shape[1] == 0:
                 continue
+            valid = int((target != -100).sum().item())
+            if valid == 0:
+                continue
             losses.append(
                 F.cross_entropy(
                     prediction.reshape(-1, self.config.vocab_size),
@@ -261,10 +341,13 @@ class FarmSLM(nn.Module):
                     ignore_index=-100,
                 )
             )
-            weights.append(prediction.new_tensor(target.shape[1]))
+            weights.append(prediction.new_tensor(valid))
 
         if labels is None:
-            return torch.cat(logit_chunks, dim=1)
+            logits = torch.cat(logit_chunks, dim=1)
+            if visual_length:
+                return logits[:, visual_length:, :]
+            return logits
         if not losses:
             raise ValueError("no tokens contributed to the loss")
         total = torch.stack(weights).sum()
@@ -289,6 +372,9 @@ class FarmSLM(nn.Module):
                 "segment_length": str(self.config.segment_length),
                 "memory_slots": str(self.config.memory_slots),
                 "domains": domains,
+                "image_channels": str(self.config.image_channels),
+                "patch_size": str(self.config.patch_size),
+                "image_size": str(self.config.image_size),
             },
         )
 
@@ -301,6 +387,10 @@ class FarmSLM(nn.Module):
             raise ValueError("safetensors file does not match this context window")
         if metadata.get("domains") != ",".join(self.config.domains):
             raise ValueError("safetensors file does not match these domains")
+        if metadata.get("image_size") != str(self.config.image_size) or metadata.get(
+            "patch_size"
+        ) != str(self.config.patch_size):
+            raise ValueError("safetensors file does not match this vision encoder")
         incompatible = self.load_state_dict(state, strict=False)
         if incompatible.unexpected_keys:
             raise ValueError(f"unexpected weights: {incompatible.unexpected_keys}")
@@ -331,6 +421,9 @@ def architecture_report(model: FarmSLM) -> str:
         f"head_dim={config.head_dim}",
         f"intermediate={config.intermediate_size}",
         f"vocab={config.vocab_size}",
+        f"image_channels={config.image_channels}",
+        f"patch_size={config.patch_size}",
+        f"image_size={config.image_size}",
         f"rope_theta={config.rope_theta}",
         f"parameters={params}",
         f"carried_memory_fp16_bytes={memory_bytes}",

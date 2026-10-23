@@ -30,6 +30,9 @@ class FarmSLMConfig:
     memory_slots: int
     rope_theta: float
     rms_norm_eps: float
+    image_channels: int
+    patch_size: int
+    image_size: int
     domains: tuple[str, ...]
 
     def __post_init__(self) -> None:
@@ -50,6 +53,13 @@ class FarmSLMConfig:
             raise ValueError("query heads must divide evenly into key/value heads")
         if self.segment_length > self.max_position_embeddings:
             raise ValueError("segment_length cannot exceed the context window")
+        _positive("image_channels", self.image_channels)
+        _positive("patch_size", self.patch_size)
+        _positive("image_size", self.image_size)
+        if self.image_channels > 4:
+            raise ValueError("image_channels cannot exceed 4")
+        if self.patch_size < 4 or self.image_size % self.patch_size != 0:
+            raise ValueError("image_size must be divisible by patch_size, and patch_size must be at least 4")
         if len(self.domains) != len(set(self.domains)):
             raise ValueError("domain names must be unique")
         for domain in self.domains:
@@ -173,6 +183,9 @@ def load_project(path: Path | None = None) -> ProjectConfig:
         memory_slots=_as_int(_number(model_node, "memory_slots")),
         rope_theta=float(_number(model_node, "rope_theta")),
         rms_norm_eps=float(_number(model_node, "rms_norm_eps")),
+        image_channels=_as_int(_number(model_node, "image_channels")),
+        patch_size=_as_int(_number(model_node, "patch_size")),
+        image_size=_as_int(_number(model_node, "image_size")),
         domains=domains,
     )
     collection_node = _one(nodes, "collection")

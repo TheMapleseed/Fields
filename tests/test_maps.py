@@ -11,7 +11,12 @@ from rasterio.transform import from_origin
 from rasterio.warp import transform
 
 from farm_slm.config import load_map_settings
-from farm_slm.maps import MapSheetError, locate_coordinate, write_coordinate_example
+from farm_slm.maps import (
+    MapSheetError,
+    locate_coordinate,
+    read_chip,
+    write_coordinate_example,
+)
 
 
 class MapTests(unittest.TestCase):
@@ -55,6 +60,10 @@ class MapTests(unittest.TestCase):
                 float(longitude[0]),
                 float(latitude[0]),
             )
+            image = read_chip(chip)
+            self.assertEqual(tuple(image.shape), (3, 16, 16))
+            self.assertGreaterEqual(float(image.min()), 0.0)
+            self.assertLessEqual(float(image.max()), 1.0)
         self.assertEqual(again["column"], record["chip_column"])
         self.assertEqual(again["row"], record["chip_row"])
         payload = json.dumps(record)

@@ -40,6 +40,9 @@ class ModelTests(unittest.TestCase):
             memory_slots=4,
             rope_theta=1_000_000.0,
             rms_norm_eps=1e-6,
+            image_channels=3,
+            patch_size=16,
+            image_size=32,
             domains=domains,
         )
         torch.manual_seed(7)
@@ -62,6 +65,41 @@ class ModelTests(unittest.TestCase):
         model.load_safetensors(saved)
         self.assertEqual(model.lm_head.weight.data_ptr(), model.embed.weight.data_ptr())
         self.assertIn("context_window=500000", architecture_report(model))
+
+    def test_the_decoder_sees_the_map_chip(self) -> None:
+        project = load_project()
+        config = FarmSLMConfig(
+            vocab_size=project.model.vocab_size,
+            hidden_size=32,
+            intermediate_size=64,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            max_position_embeddings=64,
+            segment_length=16,
+            memory_slots=4,
+            rope_theta=1_000_000.0,
+            rms_norm_eps=1e-6,
+            image_channels=3,
+            patch_size=16,
+            image_size=32,
+            domains=project.model.domains,
+        )
+        torch.manual_seed(3)
+        model = FarmSLM(config)
+        token_ids = torch.randint(0, config.vocab_size, (1, 8))
+        blank = torch.zeros(1, 3, 32, 32)
+        marked = blank.clone()
+        marked[:, :, :16, :16] = 1
+        blank_logits = model(token_ids, images=blank)
+        marked_logits = model(token_ids, images=marked)
+        self.assertEqual(tuple(blank_logits.shape), (1, 8, config.vocab_size))
+        self.assertFalse(torch.allclose(blank_logits, marked_logits))
+        loss = model(token_ids, labels=token_ids, images=marked)
+        self.assertTrue(torch.isfinite(loss))
+        loss.backward()
+        self.assertIsNotNone(model.vision.proj.weight.grad)
+        self.assertGreater(float(model.vision.proj.weight.grad.abs().sum()), 0.0)
 
 
 if __name__ == "__main__":

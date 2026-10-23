@@ -1,6 +1,6 @@
 // Source catalog for Fields. Collection code does not read this file yet.
-// The model is text-only. Map sources are listed so their features can be
-// written as GeoJSON or Well-Known Text plus a prose description.
+// Map chips are georeferenced GeoTIFFs. The vision encoder reads those chips.
+// A screenshot has no coordinate system and cannot be plotted.
 // Licenses below are what the publisher pages state. Keep the license with every record.
 
 source "openstax" {
@@ -390,7 +390,7 @@ source "naip" {
   publisher "USDA Farm Service Agency and USGS"
   home "https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPImagery/ImageServer"
   kind "foliage"
-  note "Leaf-on aerial photographs of US farmland, about 0.6 meter, public domain. This is the foliage picture. It is not a screenshot of Google Maps. The text model does not train on the image files."
+  note "Leaf-on aerial photographs of US farmland, about 0.6 meter, public domain. This is the foliage picture. Pass the GeoTIFF to the vision encoder. A screenshot cannot be plotted."
   item {
     title "NAIP imagery on The National Map"
     domain "spatial"
