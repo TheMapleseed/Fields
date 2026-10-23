@@ -127,16 +127,35 @@ class ProjectConfig:
             raise ValueError("weights path must stay inside the project")
 
 
-def load_project(path: Path | None = None) -> ProjectConfig:
+@dataclass(frozen=True)
+class MapSettings:
+    chip_size: int
+
+    def __post_init__(self) -> None:
+        if self.chip_size < 8 or self.chip_size > 2048 or self.chip_size % 2 != 0:
+            raise ValueError("chip_size must be an even integer from 8 to 2048")
+
+
+def load_map_settings(path: Path | None = None) -> MapSettings:
+    nodes = _read_nodes(path)
+    maps = _one(nodes, "maps")
+    return MapSettings(chip_size=_as_int(_number(maps, "chip_size")))
+
+
+def _read_nodes(path: Path | None) -> tuple[Node, ...]:
     config_path = project_root() / "farm_slm.kdl" if path is None else path
     try:
         text = config_path.read_text(encoding="utf-8")
     except OSError as exc:
         raise ValueError(f"cannot read {config_path}") from exc
     try:
-        nodes = parse_kdl(text)
+        return parse_kdl(text)
     except KdlError as exc:
         raise ValueError(f"invalid configuration: {exc}") from exc
+
+
+def load_project(path: Path | None = None) -> ProjectConfig:
+    nodes = _read_nodes(path)
     model_node = _one(nodes, "model")
     domain_node = _one(nodes, "domains")
     domains = tuple(_string_arg(child) for child in domain_node.children if child.name == "domain")

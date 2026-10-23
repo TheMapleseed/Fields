@@ -40,6 +40,10 @@ train {
   max_train_tokens 8192
 }
 
+maps {
+  chip_size 256
+}
+
 weights {
   format "safetensors"
   path "artifacts/farm_slm.safetensors"

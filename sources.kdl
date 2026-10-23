@@ -355,6 +355,73 @@ source "nhd" {
   }
 }
 
+source "openstreetmap" {
+  title "OpenStreetMap"
+  publisher "OpenStreetMap Foundation"
+  home "https://www.openstreetmap.org/copyright/en-US"
+  kind "map"
+  note "Open Database License. Credit OpenStreetMap contributors. If you build a database from this data, that database stays under the same license. Land cover tags include farmland and woods. Do not trace these features off Google Maps."
+  item {
+    title "OpenStreetMap data"
+    domain "spatial"
+    url "https://planet.openstreetmap.org/"
+    covers "fields, woods, roads, and water as map data"
+    license "ODbL-1.0"
+  }
+}
+
+source "extension" {
+  title "Land-grant extension publications"
+  publisher "State land-grant universities"
+  home "https://www.nifa.usda.gov/"
+  kind "bulletins"
+  note "There is no single open pile of extension bulletins. Each one is copyrighted by its university unless that page grants a license. Collect a bulletin only when its page says you may. Skip the rest."
+  item {
+    title "Cooperative Extension System"
+    domain "agriculture"
+    url "https://www.nifa.usda.gov/"
+    covers "crop, soil, and pest bulletins published by state extension services"
+    license "per-bulletin"
+  }
+}
+
+source "naip" {
+  title "National Agriculture Imagery Program"
+  publisher "USDA Farm Service Agency and USGS"
+  home "https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPImagery/ImageServer"
+  kind "foliage"
+  note "Leaf-on aerial photographs of US farmland, about 0.6 meter, public domain. This is the foliage picture. It is not a screenshot of Google Maps. The text model does not train on the image files."
+  item {
+    title "NAIP imagery on The National Map"
+    domain "spatial"
+    url "https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPImagery/ImageServer"
+    covers "summer foliage, fields, and tree cover"
+    license "public-domain"
+  }
+}
+
+source "usgs-topo" {
+  title "USGS topographic maps"
+  publisher "United States Geological Survey"
+  home "https://ngmdb.usgs.gov/topoview/"
+  kind "topography"
+  note "Contour maps. Sheets from 1884 through 2006 are public domain. Some US Topo sheets from 2010 through 2016 include commercial road data, so read the credit line on those sheets."
+  item {
+    title "TopoView historical topographic maps"
+    domain "spatial"
+    url "https://ngmdb.usgs.gov/topoview/"
+    covers "elevation contours, slope, and landform names"
+    license "public-domain"
+  }
+  item {
+    title "USGS copyright FAQ for topographic maps"
+    domain "spatial"
+    url "https://www.usgs.gov/faqs/are-usgs-topographic-maps-copyrighted"
+    covers "which sheets are public domain and which credits must stay"
+    license "public-domain"
+  }
+}
+
 format "text" {
   status "current"
   encoding "GeoJSON or WKT plus prose"
@@ -363,7 +430,7 @@ format "text" {
 }
 
 format "vision" {
-  status "later"
-  encoding "map tile plus a written reading"
-  note "Needs a vision adapter this model does not have. Do not download satellite tiles or rasters for the current corpus."
+  status "georeferenced-chips"
+  encoding "sheet chip plus the pixel that contains the coordinate"
+  note "Cut the chip from a GeoTIFF whose coordinate system is still attached. The labeled pixel comes from that transform, so the point sits on the correct contour. A screenshot has no coordinate system and cannot be plotted. Foliage sheets are NAIP. Topographic sheets are USGS maps."
 }

@@ -2,3 +2,4 @@ torch==2.8.0
 safetensors==0.7.0
 numpy==2.0.2
 packaging==26.3
+rasterio==1.4.3
