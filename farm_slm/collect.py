@@ -1,7 +1,9 @@
-"""GitHub collection slots for the farming language model.
+"""Collection slots for the farming language model.
 
-Queries start empty. Add them to the plan, then call collect_github. The
-collector stores text. It does not clone repositories or run their code.
+GitHub queries start empty. Add them to the plan, then call collect_github.
+Catalog URLs are routed by farm_slm.fetch; collect_catalog dry-runs unless
+fetch_catalog is on. Collectors store text. They do not clone repositories
+or run their code.
 """
 
 from __future__ import annotations
@@ -18,6 +20,16 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from farm_slm.config import CollectionSettings, load_project, project_root
+from farm_slm.fetch import FetchError, Transport as FetchTransport, fetch_item, primary_plan, routing_report
+from farm_slm.dumps import dump_intake_report
+from farm_slm.maps import map_intake_report
+from farm_slm.sources import (
+    SourceCatalog,
+    SourceItem,
+    collection_targets,
+    github_plan_from_catalog,
+    load_source_catalog,
+)
 
 DOMAINS: tuple[str, ...] = load_project().model.domains
 
@@ -63,6 +75,11 @@ def empty_plan() -> dict[str, list[str]]:
     return {domain: [] for domain in DOMAINS}
 
 
+def catalog_plan() -> dict[str, list[str]]:
+    """GitHub query slots derived from sources.kdl. Does not hit the network."""
+    return github_plan_from_catalog(load_source_catalog())
+
+
 def collection_section(plan: Mapping[str, Sequence[str]] | None = None) -> str:
     current = empty_plan() if plan is None else plan
     lines = ["GitHub collection slots"]
@@ -77,7 +94,94 @@ def collection_section(plan: Mapping[str, Sequence[str]] | None = None) -> str:
         "record fields: domain, text, region, units, repo, path, sha, license, source_url"
     )
     lines.append("Add queries to the plan, then call collect_github(plan).")
+    lines.append("")
+    lines.append(collection_targets())
+    lines.append("")
+    lines.append(map_intake_report())
+    lines.append("")
+    lines.append(dump_intake_report())
     return "\n".join(lines)
+
+
+def collect_catalog(
+    *,
+    fetch: bool | None = None,
+    root: Path | None = None,
+    transport: FetchTransport | None = None,
+    catalog: SourceCatalog | None = None,
+) -> CollectionSummary:
+    """Route every sources.kdl item. Download only when fetch is on."""
+    project = load_project()
+    settings = project.collection
+    should_fetch = settings.fetch_catalog if fetch is None else fetch
+    current = catalog if catalog is not None else load_source_catalog()
+    report = routing_report(current.items)
+    if not should_fetch:
+        return CollectionSummary(
+            0,
+            (),
+            (),
+            f"Catalog dry-run. No downloads.\n{report}",
+        )
+
+    base = project_root() if root is None else root
+    by_domain: dict[str, list[dict[str, str]]] = {domain: [] for domain in DOMAINS}
+    written = 0
+    files: list[str] = []
+    skipped: list[str] = []
+    total_bytes = 0
+    for item in current.items:
+        plan = primary_plan(item)
+        if not plan.fetchable:
+            skipped.append(f"{item.title}: deferred ({plan.channel})")
+            continue
+        if total_bytes >= settings.max_total_bytes:
+            skipped.append("stopped at max_total_bytes")
+            break
+        try:
+            result = fetch_item(item, transport)
+        except FetchError as exc:
+            skipped.append(f"{item.title}: {exc}")
+            continue
+        encoded = result.text.encode("utf-8")
+        if len(encoded) > settings.max_file_bytes:
+            skipped.append(f"{item.title}: over max_file_bytes")
+            continue
+        if total_bytes + len(encoded) > settings.max_total_bytes:
+            skipped.append("stopped at max_total_bytes")
+            break
+        total_bytes += len(encoded)
+        by_domain[item.model_domain].append(_catalog_record(item, result.text, plan.channel))
+        written += 1
+    for domain, records in by_domain.items():
+        if not records:
+            continue
+        files.append(_write_domain(base, domain, records, suffix=".catalog.jsonl"))
+    note = (
+        f"Collected catalog text ({written} records).\n{report}"
+        if written
+        else f"No catalog text downloaded.\n{report}"
+    )
+    return CollectionSummary(written, tuple(files), tuple(skipped), note)
+
+
+def _catalog_record(item: SourceItem, text: str, channel: str) -> dict[str, str]:
+    return {
+        "domain": item.model_domain,
+        "text": text,
+        "region": "unspecified",
+        "units": "unspecified",
+        "license": item.license,
+        "source_url": item.url,
+        "source_id": item.source_id,
+        "title": item.title,
+        "covers": item.covers,
+        "kind": item.kind,
+        "channel": channel,
+        "repo": "",
+        "path": "",
+        "sha": "",
+    }
 
 
 def collect_github(
@@ -379,15 +483,24 @@ def _collect_repo(
     return records, used, notes
 
 
-def _write_domain(root: Path, domain: str, records: Sequence[Mapping[str, str]]) -> str:
+def _write_domain(
+    root: Path,
+    domain: str,
+    records: Sequence[Mapping[str, str]],
+    *,
+    suffix: str = ".jsonl",
+) -> str:
     if domain not in DOMAINS:
         raise CollectionError("refusing to write an unknown domain")
-    relative = Path("data") / "corpus" / f"{domain}.jsonl"
+    # GitHub writes domain.jsonl; catalog writes domain.catalog.jsonl.
+    if suffix not in {".jsonl", ".catalog.jsonl"}:
+        raise CollectionError("refusing an unexpected corpus suffix")
+    relative = Path("data") / "corpus" / f"{domain}{suffix}"
     destination = root / relative
     if destination.resolve().parent != (root / "data" / "corpus").resolve():
         raise CollectionError("refusing to write outside the corpus directory")
     destination.parent.mkdir(parents=True, exist_ok=True)
-    temporary = destination.with_suffix(".jsonl.partial")
+    temporary = destination.with_name(destination.name + ".partial")
     lines: list[str] = []
     for record in records:
         line = json.dumps(dict(record), ensure_ascii=False, separators=(",", ":"))
@@ -478,3 +591,19 @@ def _github_url(path: str) -> str:
     if parsed.scheme != "https" or parsed.hostname != "api.github.com":
         raise CollectionError("refusing a non-API URL")
     return url
+
+
+def main() -> None:
+    """Print the full collection wiring. Does not download unless fetch_catalog is on."""
+    print(collection_section(catalog_plan()))
+    print("")
+    summary = collect_catalog()
+    print(summary.note)
+    if summary.files:
+        print("files:")
+        for path in summary.files:
+            print(f"  {path}")
+
+
+if __name__ == "__main__":
+    main()

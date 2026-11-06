@@ -1,4 +1,11 @@
-// Source catalog for Fields. Collection code does not read this file yet.
+// Source catalog for Fields. farm_slm.sources reads this file and builds collection
+// targets and GitHub query slots. farm_slm.fetch routes every item to a channel.
+// Permanent collect_catalog stays off (fetch_catalog 0). Training pulls one item per
+// step (fetch_during_train 1) and discards it (ephemeral_corpus 1) so machines do not
+// keep the corpus on disk.
+// English prose today: OpenStax Writing Guide and plainlanguage.gov (style, not a lexicon).
+// English definitions: dictionaryapi.dev fronts English Wiktionary (~885k headwords, the
+// largest open English dictionary). Seeds live in english_seeds.kdl.
 // Map chips are georeferenced GeoTIFFs. The vision encoder reads those chips.
 // A screenshot has no coordinate system and cannot be plotted.
 // Licenses below are what the publisher pages state. Keep the license with every record.
@@ -9,12 +16,20 @@ source "openstax" {
   publisher "Rice University"
   home "https://openstax.org"
   kind "textbooks"
-  note "Read the license on each book page. The books are not all CC BY."
+  note "Science core: math, biology, physics, chemistry, and economics. Detail pages resolve to WEB PDFs via the OpenStax CMS pdf_url. Training caches one PDF, walks pages, then deletes it. Read the license on each book page. The books are not all CC BY."
   item {
     title "Writing Guide with Handbook"
     domain "english"
     url "https://openstax.org/details/books/writing-guide"
-    covers "grammar, structure, and synthesis"
+    covers "grammar, structure, and synthesis; composition handbook, not a word dictionary"
+    license "see-book-page"
+  }
+  // Mathematics
+  item {
+    title "College Algebra 2e"
+    domain "mathematics"
+    url "https://openstax.org/details/books/college-algebra-2e"
+    covers "algebra used in rates, concentrations, and farm calculations"
     license "see-book-page"
   }
   item {
@@ -53,6 +68,21 @@ source "openstax" {
     license "see-book-page"
   }
   item {
+    title "Introductory Statistics 2e"
+    domain "mathematics"
+    url "https://openstax.org/details/books/introductory-statistics-2e"
+    covers "descriptive statistics, probability, and inference for measured field data"
+    license "see-book-page"
+  }
+  // Biology
+  item {
+    title "Concepts of Biology"
+    domain "biology"
+    url "https://openstax.org/details/books/concepts-biology"
+    covers "cells, genetics, and organismal biology for non-majors"
+    license "see-book-page"
+  }
+  item {
     title "Biology 2e"
     domain "biology"
     url "https://openstax.org/details/books/biology-2e"
@@ -60,10 +90,25 @@ source "openstax" {
     license "see-book-page"
   }
   item {
+    title "Microbiology"
+    domain "biology"
+    url "https://openstax.org/details/books/microbiology"
+    covers "microbes, soil life, and disease ecology"
+    license "see-book-page"
+  }
+  // Chemistry
+  item {
     title "Chemistry 2e"
     domain "chemistry"
     url "https://openstax.org/details/books/chemistry-2e"
     covers "general chemistry, including soil-chemistry fundamentals"
+    license "see-book-page"
+  }
+  item {
+    title "Chemistry: Atoms First 2e"
+    domain "chemistry"
+    url "https://openstax.org/details/books/chemistry-atoms-first-2e"
+    covers "atomic structure threaded through general chemistry"
     license "see-book-page"
   }
   item {
@@ -73,12 +118,134 @@ source "openstax" {
     covers "organic chemistry and biochemistry foundations"
     license "see-book-page"
   }
+  // Physics
   item {
     title "College Physics 2e"
     domain "physics"
     url "https://openstax.org/details/books/college-physics-2e"
     covers "fluids, heat, and light, which are the physics used in irrigation and weather"
     license "see-book-page"
+  }
+  item {
+    title "University Physics Volume 1"
+    domain "physics"
+    url "https://openstax.org/details/books/university-physics-volume-1"
+    covers "mechanics, waves, and thermodynamics"
+    license "see-book-page"
+  }
+  item {
+    title "University Physics Volume 2"
+    domain "physics"
+    url "https://openstax.org/details/books/university-physics-volume-2"
+    covers "electricity, magnetism, and optics"
+    license "see-book-page"
+  }
+  item {
+    title "University Physics Volume 3"
+    domain "physics"
+    url "https://openstax.org/details/books/university-physics-volume-3"
+    covers "modern physics and further optics"
+    license "see-book-page"
+  }
+  // Economics (OpenStax); Austrian texts are under source "mises"
+  item {
+    title "Principles of Economics 3e"
+    domain "economics"
+    url "https://openstax.org/details/books/principles-economics-3e"
+    covers "markets, prices, production, and trade"
+    license "see-book-page"
+  }
+  item {
+    title "Principles of Microeconomics 3e"
+    domain "economics"
+    url "https://openstax.org/details/books/principles-microeconomics-3e"
+    covers "supply, demand, firm behavior, and market structure"
+    license "see-book-page"
+  }
+  item {
+    title "Principles of Macroeconomics 3e"
+    domain "economics"
+    url "https://openstax.org/details/books/principles-macroeconomics-3e"
+    covers "money, inflation, growth, and national accounts"
+    license "see-book-page"
+  }
+}
+
+source "mises" {
+  title "Mises Institute library"
+  publisher "Ludwig von Mises Institute"
+  home "https://mises.org/library/books"
+  kind "economics"
+  note "Free economics PDFs hosted on cdn.mises.org. Training uses direct PDF URLs (library HTML pages block automated fetch). One PDF is cached, walked page by page, then deleted. Keep Mises Institute attribution with each record."
+  item {
+    title "Principles of Economics (Menger)"
+    domain "economics"
+    url "https://cdn.mises.org/principles_of_economics.pdf"
+    covers "Carl Menger foundations of Austrian economics: value, price, and goods"
+    license "see-mises-page"
+  }
+  item {
+    title "Human Action"
+    domain "economics"
+    url "https://cdn.mises.org/Human%20Action_3.pdf"
+    covers "Ludwig von Mises treatise on praxeology, markets, and calculation"
+    license "see-mises-page"
+  }
+  item {
+    title "The Theory of Money and Credit"
+    domain "economics"
+    url "https://cdn.mises.org/The%20Theory%20of%20Money%20and%20Credit.pdf"
+    covers "money, banking, and credit expansion"
+    license "see-mises-page"
+  }
+  item {
+    title "Bureaucracy"
+    domain "economics"
+    url "https://cdn.mises.org/Bureaucracy.pdf"
+    covers "bureaucratic management versus profit-and-loss calculation"
+    license "see-mises-page"
+  }
+  item {
+    title "Socialism: An Economic and Sociological Analysis"
+    domain "economics"
+    url "https://cdn.mises.org/Socialism%20An%20Economic%20and%20Sociological%20Analysis.pdf"
+    covers "economic calculation under socialism"
+    license "see-mises-page"
+  }
+  item {
+    title "Economic Calculation in the Socialist Commonwealth"
+    domain "economics"
+    url "https://cdn.mises.org/Economic%20Calculation%20in%20the%20Socialist%20Commonwealth_Vol_2.pdf"
+    covers "the calculation argument in short form"
+    license "see-mises-page"
+  }
+  item {
+    title "Economics for Real People"
+    domain "economics"
+    url "https://cdn.mises.org/Economics%20for%20Real%20People.pdf"
+    covers "introductory Austrian economics in plain prose"
+    license "see-mises-page"
+  }
+  item {
+    title "What Has Government Done to Our Money"
+    domain "economics"
+    url "https://cdn.mises.org/What%20Has%20Government%20Done%20to%20Our%20Money.pdf"
+    covers "Rothbard on money, inflation, and monetary history"
+    license "see-mises-page"
+  }
+  item {
+    title "The Law (Bastiat)"
+    domain "economics"
+    url "https://cdn.mises.org/The%20Law.pdf"
+    covers "Bastiat on law, plunder, and liberty"
+    license "see-mises-page"
+  }
+  item {
+    title "Anatomy of the State"
+    domain "economics"
+    url "https://cdn.mises.org/Anatomy%20of%20the%20State.pdf"
+    covers "Rothbard on the nature of the state"
+    license "see-mises-page"
   }
 }
 
@@ -316,13 +483,28 @@ source "plain-language" {
   publisher "United States government"
   home "https://www.plainlanguage.gov/"
   kind "english"
-  note "Federal guidance for short, direct English. US government work."
+  note "Federal guidance for short, direct English. US government work. Style, not a dictionary."
   item {
     title "plainlanguage.gov"
     domain "english"
     url "https://www.plainlanguage.gov/"
     covers "short sentences and defined technical words"
     license "public-domain"
+  }
+}
+
+source "dictionaryapi-dev" {
+  title "Free Dictionary API"
+  publisher "dictionaryapi.dev (Wiktionary-backed)"
+  home "https://dictionaryapi.dev/"
+  kind "english-dictionary"
+  note "English Wiktionary is the largest open English dictionary by headword count. This API returns definitions per word. Training expands english_seeds.kdl against the entries URL and discards each pull. Text is CC BY-SA (Wiktionary). Do not store the full dump on constrained machines."
+  item {
+    title "dictionaryapi.dev English entries"
+    domain "english"
+    url "https://api.dictionaryapi.dev/api/v2/entries/en/"
+    covers "definitions, parts of speech, and example sentences from English Wiktionary"
+    license "CC-BY-SA"
   }
 }
 

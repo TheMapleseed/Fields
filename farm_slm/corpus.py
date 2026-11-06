@@ -22,6 +22,9 @@ _DOMAIN_ALIASES: dict[str, str] = {
     "botany": "agricultural_linguistics",
     "mathematics": "physics",
     "topology": "physics",
+    "biology": "chemistry",
+    # OpenStax and Mises economics fold into farm-facing market language.
+    "economics": "agricultural_linguistics",
 }
 
 

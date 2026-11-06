@@ -96,6 +96,12 @@ class CollectionSettings:
     max_file_bytes: int
     max_total_bytes: int
     max_queries_per_domain: int
+    fetch_catalog: bool
+    fetch_during_train: bool
+    ephemeral_corpus: bool
+    ephemeral_items_per_step: int
+    pdf_max_bytes: int
+    pdf_chars_per_page: int
 
     def __post_init__(self) -> None:
         for name, value in (
@@ -104,8 +110,13 @@ class CollectionSettings:
             ("max_file_bytes", self.max_file_bytes),
             ("max_total_bytes", self.max_total_bytes),
             ("max_queries_per_domain", self.max_queries_per_domain),
+            ("ephemeral_items_per_step", self.ephemeral_items_per_step),
+            ("pdf_max_bytes", self.pdf_max_bytes),
+            ("pdf_chars_per_page", self.pdf_chars_per_page),
         ):
             _positive(name, value)
+        if self.pdf_chars_per_page < 64:
+            raise ValueError("pdf_chars_per_page must be at least 64")
 
 
 @dataclass(frozen=True)
@@ -303,6 +314,12 @@ def load_project(path: Path | None = None) -> ProjectConfig:
         max_file_bytes=_as_int(_number(collection_node, "max_file_bytes")),
         max_total_bytes=_as_int(_number(collection_node, "max_total_bytes")),
         max_queries_per_domain=_as_int(_number(collection_node, "max_queries_per_domain")),
+        fetch_catalog=_as_bool(_number(collection_node, "fetch_catalog")),
+        fetch_during_train=_as_bool(_number(collection_node, "fetch_during_train")),
+        ephemeral_corpus=_as_bool(_number(collection_node, "ephemeral_corpus")),
+        ephemeral_items_per_step=_as_int(_number(collection_node, "ephemeral_items_per_step")),
+        pdf_max_bytes=_as_int(_number(collection_node, "pdf_max_bytes")),
+        pdf_chars_per_page=_as_int(_number(collection_node, "pdf_chars_per_page")),
     )
     train_node = _one(nodes, "train")
     train = TrainSettings(

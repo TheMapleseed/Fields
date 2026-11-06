@@ -13,7 +13,9 @@ from rasterio.warp import transform
 from farm_slm.config import load_map_settings
 from farm_slm.maps import (
     MapSheetError,
+    catalog_map_plan,
     locate_coordinate,
+    map_intake_report,
     read_chip,
     write_coordinate_example,
 )
@@ -22,6 +24,14 @@ from farm_slm.maps import (
 class MapTests(unittest.TestCase):
     def test_chip_size_comes_from_the_project_file(self) -> None:
         self.assertEqual(load_map_settings().chip_size, 256)
+
+    def test_catalog_map_plan_lists_geospatial_targets(self) -> None:
+        targets = catalog_map_plan()
+        self.assertGreaterEqual(len(targets), 1)
+        self.assertTrue(all(item.intake == "maps" for item in targets))
+        report = map_intake_report()
+        self.assertIn("Map sheet intake", report)
+        self.assertIn("local_sheets=", report)
 
     def test_longitude_latitude_lands_on_the_hand_computed_pixel(self) -> None:
         with TemporaryDirectory() as directory:

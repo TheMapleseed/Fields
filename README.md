@@ -42,15 +42,18 @@ Training also writes a resume checkpoint under `artifacts/checkpoints/`: `model.
 - The vision encoder reads a map chip during the forward pass. Training loads a chip when the JSONL record names one.
 - Map chips are cut from georeferenced sheets, and the labeled pixel is checked against the sheet's coordinate system. Map examples enter training as physics-domain text.
 - Soil loss is calculated with RUSLE, and the cover and support pair with the lowest loss is selected from `farm_slm.kdl`.
-- `sources.kdl` lists the public catalogs intended for later collection, including global crops and farming techniques (Wikipedia, Wikidata, FAO ECOCROP, Crop Ontology, and CGIAR centers). Each record keeps the license stated by the publisher. Wikipedia text is CC BY-SA 4.0.
-- The GitHub collector can save text as JSONL under `data/corpus/` once it is given queries. Catalog labels such as soil or spatial fold into the five model domains. Multiline text is flattened.
-- Training shuffles examples, can hold out a region, writes `artifacts/farm_slm.safetensors`, and resumes from `artifacts/checkpoints/`.
+- `sources.kdl` lists the public catalogs intended for collection, including global crops and farming techniques (Wikipedia, Wikidata, FAO ECOCROP, Crop Ontology, and CGIAR centers). Each record keeps the license stated by the publisher. Wikipedia text is CC BY-SA 4.0.
+- English prose comes from OpenStax Writing Guide and plainlanguage.gov (style/composition, not a lexicon). Definitions come from [dictionaryapi.dev](https://dictionaryapi.dev/), which serves English Wiktionary — the largest open English dictionary by headword count (~885k). Seed words live in `english_seeds.kdl` and are expanded only during training pulls.
+- Science textbooks from OpenStax cover math, biology, physics, chemistry, and economics (PDF page walks). Austrian and classical economics PDFs come from [Mises.org](https://mises.org/library/books) (`cdn.mises.org`). Catalog label `economics` folds into `agricultural_linguistics`.
+- Training machines are size-constrained: `fetch_catalog` stays off. `fetch_during_train 1` and `ephemeral_corpus 1` pull one catalog/dictionary item per step and discard it so the corpus is never kept on disk. Offline or failed pulls fall back to the short primers.
+- PDFs (OpenStax science books and direct `.pdf` URLs) enter training through `PdfSession`: resolve the real `pdf_url` from the OpenStax CMS when needed, cache **one** book under `data/corpus/.ephemeral/pdf/`, extract one page of text per step (`pypdf`), then delete the file when the book is finished or training ends. Cap with `pdf_max_bytes` / `pdf_chars_per_page`.
+- `farm_slm.fetch` routes every item to a channel (dictionary, wikipedia, html, json_document, or deferred geospatial/dump/document). Deferred geospatial items feed `catalog_map_plan()` / `data/maps/sheets/`. Dump and PDF items feed `catalog_dump_plan()` / `data/dumps/`.
+- `python -m farm_slm.collect` prints the full wiring without permanent downloads.
+- Training writes `artifacts/farm_slm.safetensors` and resumes from `artifacts/checkpoints/`.
 - `python -m farm_slm.generate` continues a prompt from the saved weights, with an optional map chip.
 
 ## Still open
 
-`sources.kdl` is a catalog only. The collector does not read it, and the GitHub query slots are empty, so there is no real corpus yet. Wikipedia and the CGIAR crop sources are listed; nothing from those dumps has been downloaded.
+Ephemeral pulls need network during training. Local map sheets under `data/maps/sheets/` and dump archives are still absent. The practice checkpoint has not yet learned from map chips or a long ephemeral run.
 
-Until that corpus exists, training still falls back to a short primer. The practice checkpoint has not learned from map chips or regional sources.
-
-What belongs next is a collector that fills `data/corpus/` from the catalog and keeps each record's license, then a longer training run on those records and their chips.
+What belongs next is a longer ephemeral training run on a networked machine, plus placing GeoTIFFs for vision.

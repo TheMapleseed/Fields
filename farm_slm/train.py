@@ -1,7 +1,8 @@
-"""Train FarmSLM on collected text, or on a short primer, and write safetensors."""
+"""Train FarmSLM on ephemeral pulls, a local corpus, or a short primer."""
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 import torch
@@ -17,6 +18,11 @@ from farm_slm.checkpoint import (
 from farm_slm.config import ProjectConfig, load_project, project_root
 from farm_slm.corpus import TrainingExample, load_training_examples
 from farm_slm.device import detect_accelerator
+from farm_slm.ephemeral import (
+    build_ephemeral_jobs,
+    clean_ephemeral,
+    make_step_puller,
+)
 from farm_slm.maps import read_chip
 from farm_slm.model import FarmSLM
 from farm_slm.tokenizer import Tokenizer
@@ -54,44 +60,78 @@ def run_training(root: Path | None = None) -> Path:
         torch.cuda.manual_seed_all(project.train.seed)
     model = FarmSLM(project.model).to(accelerator.device)
     tokenizer = Tokenizer(project.model)
+    documents, held, source, puller = _training_material(base, project)
+    try:
+        checkpoint_dir = base / project.train.checkpoint_dir
+        losses, started = _optimize(
+            model,
+            documents,
+            tokenizer,
+            project,
+            checkpoint_dir,
+            accelerator.device,
+            puller=puller,
+        )
+        destination = base / project.weights_path
+        model.save_safetensors(destination)
+        print(f"device={accelerator.label()}")
+        print(f"source={source}")
+        print(f"examples={len(documents) if puller is None else 'ephemeral-per-step'}")
+        print(f"held_out={len(held)}")
+        print(f"resume_step={started}")
+        print(f"checkpoint={checkpoint_dir.resolve()}")
+        for index, loss in enumerate(losses, start=started + 1):
+            print(f"step={index} loss={loss:.4f}")
+        if held:
+            hold_loss = _held_loss(model, held, tokenizer, project, accelerator.device)
+            print(f"hold_out_loss={hold_loss:.4f}")
+        print(f"saved={destination.resolve()}")
+        return destination
+    finally:
+        if project.collection.ephemeral_corpus:
+            clean_ephemeral(base)
+
+
+def _training_material(
+    base: Path,
+    project: ProjectConfig,
+) -> tuple[
+    list[TrainingExample],
+    list[TrainingExample],
+    str,
+    Callable[[int], TrainingExample | None] | None,
+]:
+    collection = project.collection
+    if collection.fetch_during_train:
+        jobs = build_ephemeral_jobs()
+        puller = make_step_puller(
+            jobs,
+            project.model.domains,
+            items_per_step=collection.ephemeral_items_per_step,
+            root=base,
+            settings=collection,
+        )
+        primers = _primer_examples(project.model.domains)
+        return primers, [], "ephemeral", puller
+
     documents, held = load_training_examples(
         base,
         project.model.domains,
         hold_out=project.train.hold_out_region,
     )
-    source = "corpus" if documents else "primer"
-    if not documents:
-        missing = [domain for domain in project.model.domains if domain not in _PRIMERS]
-        if missing:
-            raise ValueError(f"no primer for {', '.join(missing)}")
-        documents = [
-            TrainingExample(domain, _PRIMERS[domain], "unspecified", "unspecified")
-            for domain in project.model.domains
-        ]
-    checkpoint_dir = base / project.train.checkpoint_dir
-    losses, started = _optimize(
-        model,
-        documents,
-        tokenizer,
-        project,
-        checkpoint_dir,
-        accelerator.device,
-    )
-    destination = base / project.weights_path
-    model.save_safetensors(destination)
-    print(f"device={accelerator.label()}")
-    print(f"source={source}")
-    print(f"examples={len(documents)}")
-    print(f"held_out={len(held)}")
-    print(f"resume_step={started}")
-    print(f"checkpoint={checkpoint_dir.resolve()}")
-    for index, loss in enumerate(losses, start=started + 1):
-        print(f"step={index} loss={loss:.4f}")
-    if held:
-        hold_loss = _held_loss(model, held, tokenizer, project, accelerator.device)
-        print(f"hold_out_loss={hold_loss:.4f}")
-    print(f"saved={destination.resolve()}")
-    return destination
+    if documents:
+        return documents, held, "corpus", None
+    return _primer_examples(project.model.domains), held, "primer", None
+
+
+def _primer_examples(domains: tuple[str, ...]) -> list[TrainingExample]:
+    missing = [domain for domain in domains if domain not in _PRIMERS]
+    if missing:
+        raise ValueError(f"no primer for {', '.join(missing)}")
+    return [
+        TrainingExample(domain, _PRIMERS[domain], "unspecified", "unspecified")
+        for domain in domains
+    ]
 
 
 def _optimize(
@@ -101,6 +141,8 @@ def _optimize(
     project: ProjectConfig,
     checkpoint_dir: Path,
     device: torch.device,
+    *,
+    puller: Callable[[int], TrainingExample | None] | None = None,
 ) -> tuple[list[float], int]:
     settings = project.train
     model.train()
@@ -129,7 +171,7 @@ def _optimize(
     order = torch.randperm(len(documents)).tolist()
     losses: list[float] = []
     for step in range(started + 1, settings.steps + 1):
-        example = documents[order[(step - 1) % len(order)]]
+        example = _example_for_step(step, documents, order, puller)
         batch, images = _batch_example(example, tokenizer, settings.max_train_tokens, device)
         optimizer.zero_grad(set_to_none=True)
         loss = model(batch, labels=batch, images=images)
@@ -148,6 +190,19 @@ def _optimize(
                 weight_decay=settings.weight_decay,
             )
     return losses, started
+
+
+def _example_for_step(
+    step: int,
+    documents: list[TrainingExample],
+    order: list[int],
+    puller: Callable[[int], TrainingExample | None] | None,
+) -> TrainingExample:
+    if puller is not None:
+        pulled = puller(step)
+        if pulled is not None:
+            return pulled
+    return documents[order[(step - 1) % len(order)]]
 
 
 def _held_loss(

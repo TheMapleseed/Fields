@@ -35,6 +35,15 @@ collection {
   max_file_bytes 1000000
   max_total_bytes 20000000
   max_queries_per_domain 32
+  // Permanent corpus pulls stay off. Machines train by pulling one item per step.
+  fetch_catalog 0
+  fetch_during_train 1
+  // Discard pulled text after each step so disks do not keep the corpus.
+  ephemeral_corpus 1
+  ephemeral_items_per_step 1
+  // One OpenStax WEB PDF may be ~200-300MB while its pages are walked, then deleted.
+  pdf_max_bytes 350000000
+  pdf_chars_per_page 12000
 }
 
 train {

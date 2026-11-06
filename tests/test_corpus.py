@@ -23,6 +23,9 @@ class CorpusTests(unittest.TestCase):
         self.assertEqual(resolve_domain("spatial", allowed), "physics")
         self.assertEqual(resolve_domain("soil", allowed), "chemistry")
         self.assertEqual(resolve_domain("agriculture", allowed), "agricultural_linguistics")
+        self.assertEqual(resolve_domain("economics", allowed), "agricultural_linguistics")
+        self.assertEqual(resolve_domain("biology", allowed), "chemistry")
+        self.assertEqual(resolve_domain("mathematics", allowed), "physics")
 
     def test_map_record_becomes_a_training_example(self) -> None:
         row = {

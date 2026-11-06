@@ -18,13 +18,48 @@ import torch
 from rasterio.warp import transform
 from rasterio.windows import Window
 
-from farm_slm.config import load_map_settings
+from farm_slm.config import load_map_settings, project_root
+from farm_slm.sources import DeferredTarget, SourceCatalog, map_targets_from_catalog
 
 _STEM = re.compile(r"[^A-Za-z0-9._-]+")
 
 
 class MapSheetError(ValueError):
     pass
+
+
+def sheets_directory(root: Path | None = None) -> Path:
+    base = project_root() if root is None else root
+    return base / "data" / "maps" / "sheets"
+
+
+def catalog_map_plan(catalog: SourceCatalog | None = None) -> tuple[DeferredTarget, ...]:
+    """Catalog elevation/imagery/topography targets for local sheet intake. No download."""
+    return map_targets_from_catalog(catalog)
+
+
+def map_intake_report(catalog: SourceCatalog | None = None, root: Path | None = None) -> str:
+    targets = catalog_map_plan(catalog)
+    sheets = sheets_directory(root)
+    local = sorted(sheets.glob("*.tif")) + sorted(sheets.glob("*.tiff")) if sheets.is_dir() else []
+    lines = [
+        "Map sheet intake",
+        f"catalog_targets={len(targets)}",
+        f"local_sheets={len(local)} under {sheets.as_posix()}",
+    ]
+    for target in targets:
+        lines.append(f"  - {target.kind}: {target.title} [{target.license}]")
+    if local:
+        for path in local[:5]:
+            lines.append(f"  sheet: {path.name}")
+        if len(local) > 5:
+            lines.append(f"  sheet: … {len(local) - 5} more")
+    else:
+        lines.append("  (no local GeoTIFFs yet)")
+    lines.append(
+        "Place a georeferenced GeoTIFF in data/maps/sheets/, then call write_coordinate_example()."
+    )
+    return "\n".join(lines)
 
 
 def locate_coordinate(sheet: Path, longitude: float, latitude: float) -> dict[str, object]:
