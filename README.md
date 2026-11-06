@@ -49,7 +49,7 @@ Training also writes a resume checkpoint under `artifacts/checkpoints/`: `model.
 - PDFs (OpenStax science books and direct `.pdf` URLs) enter training through `PdfSession`: resolve the real `pdf_url` from the OpenStax CMS when needed, cache **one** book under `data/corpus/.ephemeral/pdf/`, extract one page of text per step (`pypdf`), then delete the file when the book is finished or training ends. Cap with `pdf_max_bytes` / `pdf_chars_per_page`.
 - `farm_slm.fetch` routes every item to a channel (dictionary, wikipedia, html, json_document, or deferred geospatial/dump/document). Deferred geospatial items feed `catalog_map_plan()` / `data/maps/sheets/`. Dump and PDF items feed `catalog_dump_plan()` / `data/dumps/`.
 - `python -m farm_slm.collect` prints the full wiring without permanent downloads.
-- Training writes `artifacts/farm_slm.safetensors` and resumes from `artifacts/checkpoints/`.
+- Training writes `artifacts/farm_slm.safetensors` and checkpoints under `artifacts/checkpoints/` (`model.safetensors`, `optimizer.safetensors`, `stage.kdl`). With `resume 1`, a restart reloads weights and the ephemeral job/page cursor automatically.
 - `python -m farm_slm.generate` continues a prompt from the saved weights, with an optional map chip.
 
 ## Still open

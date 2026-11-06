@@ -1,4 +1,8 @@
-"""Train FarmSLM on ephemeral pulls, a local corpus, or a short primer."""
+"""Train FarmSLM on ephemeral pulls, a local corpus, or a short primer.
+
+Checkpoints save model + optimizer safetensors and a stage.kdl cursor so a
+stopped run resumes the same catalog/PDF page automatically.
+"""
 
 from __future__ import annotations
 
@@ -19,12 +23,21 @@ from farm_slm.config import ProjectConfig, load_project, project_root
 from farm_slm.corpus import TrainingExample, load_training_examples
 from farm_slm.device import detect_accelerator
 from farm_slm.ephemeral import (
+    StepPuller,
     build_ephemeral_jobs,
     clean_ephemeral,
     make_step_puller,
 )
 from farm_slm.maps import read_chip
 from farm_slm.model import FarmSLM
+from farm_slm.stage import (
+    StageError,
+    StageState,
+    jobs_fingerprint,
+    load_stage,
+    save_stage,
+    stage_exists,
+)
 from farm_slm.tokenizer import Tokenizer
 
 _PRIMERS: dict[str, str] = {
@@ -60,10 +73,11 @@ def run_training(root: Path | None = None) -> Path:
         torch.cuda.manual_seed_all(project.train.seed)
     model = FarmSLM(project.model).to(accelerator.device)
     tokenizer = Tokenizer(project.model)
-    documents, held, source, puller = _training_material(base, project)
+    documents, held, source, puller, jobs_sha = _training_material(base, project)
+    finished = False
     try:
         checkpoint_dir = base / project.train.checkpoint_dir
-        losses, started = _optimize(
+        losses, started, finished = _optimize(
             model,
             documents,
             tokenizer,
@@ -71,6 +85,7 @@ def run_training(root: Path | None = None) -> Path:
             checkpoint_dir,
             accelerator.device,
             puller=puller,
+            jobs_sha=jobs_sha,
         )
         destination = base / project.weights_path
         model.save_safetensors(destination)
@@ -80,6 +95,14 @@ def run_training(root: Path | None = None) -> Path:
         print(f"held_out={len(held)}")
         print(f"resume_step={started}")
         print(f"checkpoint={checkpoint_dir.resolve()}")
+        if isinstance(puller, StepPuller):
+            job = puller.cursor.current_job()
+            print(
+                "stage="
+                f"job_index={puller.cursor.job_index} "
+                f"page_index={puller.cursor.page_index} "
+                f"job={job.title if job else 'none'}"
+            )
         for index, loss in enumerate(losses, start=started + 1):
             print(f"step={index} loss={loss:.4f}")
         if held:
@@ -88,7 +111,8 @@ def run_training(root: Path | None = None) -> Path:
         print(f"saved={destination.resolve()}")
         return destination
     finally:
-        if project.collection.ephemeral_corpus:
+        # Keep the one-book PDF cache when the run stops early so resume is cheap.
+        if project.collection.ephemeral_corpus and finished:
             clean_ephemeral(base)
 
 
@@ -99,7 +123,8 @@ def _training_material(
     list[TrainingExample],
     list[TrainingExample],
     str,
-    Callable[[int], TrainingExample | None] | None,
+    StepPuller | Callable[[int], TrainingExample | None] | None,
+    str,
 ]:
     collection = project.collection
     if collection.fetch_during_train:
@@ -112,7 +137,7 @@ def _training_material(
             settings=collection,
         )
         primers = _primer_examples(project.model.domains)
-        return primers, [], "ephemeral", puller
+        return primers, [], "ephemeral", puller, jobs_fingerprint(jobs)
 
     documents, held = load_training_examples(
         base,
@@ -120,8 +145,8 @@ def _training_material(
         hold_out=project.train.hold_out_region,
     )
     if documents:
-        return documents, held, "corpus", None
-    return _primer_examples(project.model.domains), held, "primer", None
+        return documents, held, "corpus", None, ""
+    return _primer_examples(project.model.domains), held, "primer", None, ""
 
 
 def _primer_examples(domains: tuple[str, ...]) -> list[TrainingExample]:
@@ -142,8 +167,9 @@ def _optimize(
     checkpoint_dir: Path,
     device: torch.device,
     *,
-    puller: Callable[[int], TrainingExample | None] | None = None,
-) -> tuple[list[float], int]:
+    puller: StepPuller | Callable[[int], TrainingExample | None] | None = None,
+    jobs_sha: str = "",
+) -> tuple[list[float], int, bool]:
     settings = project.train
     model.train()
     trainable = [param for _, param in trainable_parameters(model)]
@@ -153,6 +179,7 @@ def _optimize(
         weight_decay=settings.weight_decay,
     )
     started = 0
+    order = torch.randperm(len(documents)).tolist()
     if settings.resume and checkpoint_exists(checkpoint_dir):
         started = load_checkpoint(
             checkpoint_dir,
@@ -166,9 +193,18 @@ def _optimize(
             raise CheckpointError(
                 f"checkpoint step {started} is past train.steps {settings.steps}"
             )
+        restored = _restore_or_bootstrap_stage(
+            checkpoint_dir,
+            step=started,
+            puller=puller,
+            jobs_sha=jobs_sha,
+            documents=documents,
+            order=order,
+        )
+        if restored is not None:
+            order = restored
         if started == settings.steps:
-            return [], started
-    order = torch.randperm(len(documents)).tolist()
+            return [], started, True
     losses: list[float] = []
     for step in range(started + 1, settings.steps + 1):
         example = _example_for_step(step, documents, order, puller)
@@ -189,14 +225,97 @@ def _optimize(
                 learning_rate=settings.learning_rate,
                 weight_decay=settings.weight_decay,
             )
-    return losses, started
+            _save_training_stage(
+                checkpoint_dir,
+                step=step,
+                puller=puller,
+                jobs_sha=jobs_sha,
+                order=tuple(order),
+            )
+    return losses, started, True
+
+
+def _restore_or_bootstrap_stage(
+    checkpoint_dir: Path,
+    *,
+    step: int,
+    puller: StepPuller | Callable[[int], TrainingExample | None] | None,
+    jobs_sha: str,
+    documents: list[TrainingExample],
+    order: list[int],
+) -> list[int] | None:
+    if stage_exists(checkpoint_dir):
+        try:
+            stage = load_stage(checkpoint_dir)
+        except StageError as exc:
+            print(f"stage_resume=skipped ({exc})")
+            return None
+        if jobs_sha and stage.jobs_sha not in {"", "none"} and stage.jobs_sha != jobs_sha:
+            print(
+                "stage_resume=reset (catalog fingerprint changed; keeping model weights)"
+            )
+            _save_training_stage(
+                checkpoint_dir,
+                step=step,
+                puller=puller,
+                jobs_sha=jobs_sha,
+                order=tuple(order),
+            )
+            return None
+        if isinstance(puller, StepPuller):
+            puller.cursor.restore(stage.job_index, stage.page_index, stage.job_url)
+            print(
+                "stage_resume="
+                f"job_index={stage.job_index} page_index={stage.page_index} "
+                f"job={stage.job_title!r}"
+            )
+        if stage.order and len(stage.order) == len(documents):
+            return list(stage.order)
+        return None
+    _save_training_stage(
+        checkpoint_dir,
+        step=step,
+        puller=puller,
+        jobs_sha=jobs_sha,
+        order=tuple(order),
+    )
+    print("stage_resume=bootstrapped")
+    return None
+
+
+def _save_training_stage(
+    checkpoint_dir: Path,
+    *,
+    step: int,
+    puller: StepPuller | Callable[[int], TrainingExample | None] | None,
+    jobs_sha: str,
+    order: tuple[int, ...],
+) -> None:
+    job_index = 0
+    page_index = 0
+    job_url = ""
+    job_title = ""
+    if isinstance(puller, StepPuller):
+        job_index, page_index, job_url, job_title = puller.cursor.snapshot()
+    save_stage(
+        checkpoint_dir,
+        StageState(
+            step=step,
+            job_index=job_index,
+            page_index=page_index,
+            job_url=job_url,
+            job_title=job_title,
+            jobs_sha=jobs_sha or "none",
+            order=order,
+        ),
+    )
 
 
 def _example_for_step(
     step: int,
     documents: list[TrainingExample],
     order: list[int],
-    puller: Callable[[int], TrainingExample | None] | None,
+    puller: StepPuller | Callable[[int], TrainingExample | None] | None,
 ) -> TrainingExample:
     if puller is not None:
         pulled = puller(step)

@@ -235,6 +235,20 @@ def pull_training_example(
         raise EphemeralError(str(exc)) from exc
 
 
+class StepPuller:
+    """Callable puller that keeps a resumable ephemeral cursor."""
+
+    def __init__(self, cursor: "EphemeralCursor") -> None:
+        self.cursor = cursor
+
+    def __call__(self, step: int) -> TrainingExample | None:
+        del step
+        try:
+            return self.cursor.next_example()
+        except EphemeralError:
+            return None
+
+
 def make_step_puller(
     jobs: Sequence[EphemeralJob],
     domains: Sequence[str],
@@ -243,32 +257,24 @@ def make_step_puller(
     transport: Transport | None = None,
     root: Path | None = None,
     settings: CollectionSettings | None = None,
-) -> Callable[[int], TrainingExample | None]:
+) -> StepPuller | Callable[[int], TrainingExample | None]:
     if items_per_step < 1:
         raise EphemeralError("ephemeral_items_per_step must be positive")
     if not jobs:
         return lambda _step: None
 
     collection = settings if settings is not None else load_project().collection
-    cursor = _EphemeralCursor(
+    cursor = EphemeralCursor(
         jobs=tuple(jobs),
         domains=tuple(domains),
         transport=transport,
         root=root,
         settings=collection,
     )
-
-    def puller(step: int) -> TrainingExample | None:
-        del step  # cursor walks its own book/page state
-        try:
-            return cursor.next_example()
-        except EphemeralError:
-            return None
-
-    return puller
+    return StepPuller(cursor)
 
 
-class _EphemeralCursor:
+class EphemeralCursor:
     """Walk jobs in order. PDF jobs yield one page per call until the book ends."""
 
     def __init__(
@@ -293,6 +299,46 @@ class _EphemeralCursor:
             max_chars=settings.pdf_chars_per_page,
             transport=transport,
         )
+
+    @property
+    def job_index(self) -> int:
+        return self._index
+
+    @property
+    def page_index(self) -> int:
+        return self._page
+
+    @property
+    def jobs(self) -> tuple[EphemeralJob, ...]:
+        return self._jobs
+
+    def current_job(self) -> EphemeralJob | None:
+        if not self._jobs:
+            return None
+        return self._jobs[self._index % len(self._jobs)]
+
+    def snapshot(self) -> tuple[int, int, str, str]:
+        job = self.current_job()
+        if job is None:
+            return self._index, self._page, "", ""
+        return self._index, self._page, job.url, job.title
+
+    def restore(self, job_index: int, page_index: int, job_url: str = "") -> None:
+        if not self._jobs:
+            return
+        if job_index < 0 or page_index < 0:
+            raise EphemeralError("cannot restore a negative stage index")
+        self._pdf.close()
+        self._index = job_index % len(self._jobs)
+        self._page = page_index
+        if job_url:
+            current = self.current_job()
+            if current is not None and current.url != job_url:
+                # Catalog shifted; find the URL or keep modular index.
+                for offset, job in enumerate(self._jobs):
+                    if job.url == job_url:
+                        self._index = offset
+                        break
 
     def next_example(self) -> TrainingExample | None:
         if not self._jobs:

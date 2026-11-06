@@ -53,7 +53,8 @@ train {
   grad_clip 1.0
   seed 42
   max_train_tokens 8192
-  // Model and optimizer safetensors under this directory. resume 1 continues from them.
+  // Model + optimizer safetensors and stage.kdl under this directory.
+  // resume 1 reloads weights and the ephemeral job/page cursor automatically.
   checkpoint_dir "artifacts/checkpoints"
   checkpoint_every 1
   resume 1
