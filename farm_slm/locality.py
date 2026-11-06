@@ -20,6 +20,7 @@ from farm_slm.erosion import (
 _REGION = re.compile(r"^[a-z]{2}$|^[a-z]+(?:-[a-z]+)*$")
 _UNITS = {"us-customary", "si", "unspecified"}
 _UNIT_LABEL = {"us-customary": "US customary", "si": "SI"}
+_WHITESPACE = re.compile(r"\s+")
 
 
 class LocalityError(ValueError):
@@ -40,13 +41,18 @@ def normalize_units(units: str) -> str:
     return cleaned
 
 
+def flatten_text(text: str) -> str:
+    cleaned = _WHITESPACE.sub(" ", text.replace("\r", "\n")).strip()
+    if not cleaned:
+        raise LocalityError("training text is empty")
+    return cleaned
+
+
 def condition_text(text: str, region: str, units: str) -> str:
     """Put the place and the unit system in front of the text when they are known."""
     place = normalize_region(region)
     system = normalize_units(units)
-    body = text.strip()
-    if not body or "\n" in body or "\r" in body:
-        raise LocalityError("training text must be one non-empty line")
+    body = flatten_text(text)
     parts: list[str] = []
     if place != "unspecified":
         parts.append(f"Place: {place}.")

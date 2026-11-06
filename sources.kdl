@@ -516,6 +516,105 @@ source "locale" {
   }
 }
 
+source "crops" {
+  title "Global crops and farming techniques"
+  publisher "several"
+  home "https://www.fao.org/"
+  kind "agriculture"
+  note "US sources name US crops. This list is for cassava, yam, plantain, teff, millet, sorghum, rice, wheat, maize, quinoa, oil palm, cocoa, coffee, tea, and the practices that grow them. Wikipedia text is CC BY-SA 4.0, so any model trained on it inherits share-alike for that text. Keep the article URL and the license on every record. Prefer dumps.wikimedia.org over scraping the live site. Wikidata structured facts are CC0. Crop Ontology and AGROVOC give the shared names for traits and practices."
+  item {
+    title "English Wikipedia dumps"
+    domain "agriculture"
+    url "https://dumps.wikimedia.org/"
+    covers "articles on crops, farming systems, and regional techniques under Category:Agriculture and related crop categories"
+    license "CC-BY-SA-4.0"
+  }
+  item {
+    title "Wikipedia reuse terms"
+    domain "english"
+    url "https://en.wikipedia.org/wiki/Wikipedia:Reusing_Wikipedia_content"
+    covers "attribution and share-alike rules for Wikipedia text"
+    license "CC-BY-SA-4.0"
+  }
+  item {
+    title "Wikidata entity dumps"
+    domain "agricultural_linguistics"
+    url "https://www.wikidata.org/wiki/Wikidata:Database_download"
+    covers "structured crop names, scientific names, and Ecocrop identifiers in many languages"
+    license "CC0"
+  }
+  item {
+    title "FAO ECOCROP"
+    domain "agriculture"
+    url "https://www.fao.org/geospatial/data-and-tools/data-portals/ecocrop/en"
+    covers "2,568 plant species with temperature, rainfall, soil pH, and use limits for global crop suitability"
+    license "see-fao-terms"
+  }
+  item {
+    title "CGIAR Crop Ontology"
+    domain "agricultural_linguistics"
+    url "https://cropontology.org/about"
+    covers "traits and variables for dozens of crops, including cassava, rice, maize, banana, and legumes"
+    license "CC-BY-4.0"
+  }
+  item {
+    title "CGIAR Agronomy Ontology"
+    domain "agriculture"
+    url "https://bigdata.cgiar.org/communities-of-practice/ontologies/"
+    covers "shared terms for agronomic practices, techniques, and experiment variables"
+    license "CC-BY-4.0"
+  }
+  item {
+    title "IRRI knowledge bank"
+    domain "agriculture"
+    url "https://www.irri.org/"
+    covers "rice production, transplanting, flooding, and pest practice for Asia and Africa"
+    license "per-record"
+  }
+  item {
+    title "CIMMYT publications"
+    domain "agriculture"
+    url "https://www.cimmyt.org/"
+    covers "maize and wheat systems, including conservation agriculture outside the United States"
+    license "per-record"
+  }
+  item {
+    title "IITA knowledge products"
+    domain "agriculture"
+    url "https://www.iita.org/"
+    covers "cassava, yam, plantain, cowpea, and other West and Central African staples"
+    license "per-record"
+  }
+  item {
+    title "ICRISAT publications"
+    domain "agriculture"
+    url "https://www.icrisat.org/"
+    covers "sorghum, millet, chickpea, and dryland techniques for Africa and South Asia"
+    license "per-record"
+  }
+  item {
+    title "CIP publications"
+    domain "agriculture"
+    url "https://cipotato.org/"
+    covers "potato and sweetpotato production and conservation"
+    license "per-record"
+  }
+  item {
+    title "AfricaRice knowledge"
+    domain "agriculture"
+    url "https://www.africarice.org/"
+    covers "African rice systems, including upland and lowland practice"
+    license "per-record"
+  }
+  item {
+    title "Bioversity International / Alliance publications"
+    domain "agriculture"
+    url "https://alliancebioversityciat.org/"
+    covers "banana, plantain, beans, and agrobiodiversity for tropical farms"
+    license "per-record"
+  }
+}
+
 format "text" {
   status "current"
   encoding "GeoJSON or WKT plus prose"

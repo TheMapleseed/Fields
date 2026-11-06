@@ -35,6 +35,14 @@ class Tokenizer:
         body = list(text.encode("utf-8"))
         return [BOS_ID, domain_id, *body, EOS_ID]
 
+    def encode_prompt(self, text: str, domain: str) -> list[int]:
+        """BOS, domain, and bytes only. Used when the model must continue the line."""
+        if not isinstance(text, str):
+            raise TypeError("text must be a string")
+        domain_id = self.domain_id(domain)
+        body = list(text.encode("utf-8"))
+        return [BOS_ID, domain_id, *body]
+
     def decode_text(self, token_ids: list[int]) -> str:
         raw = bytes(token for token in token_ids if 0 <= token <= 255)
         return raw.decode("utf-8", errors="replace")

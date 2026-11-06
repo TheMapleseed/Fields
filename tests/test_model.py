@@ -39,6 +39,8 @@ class ModelTests(unittest.TestCase):
             segment_length=16,
             memory_slots=4,
             rope_theta=1_000_000.0,
+            fope_floor_length=64,
+            fope_init_gain=0.1,
             rms_norm_eps=1e-6,
             image_channels=3,
             patch_size=16,
@@ -55,6 +57,7 @@ class ModelTests(unittest.TestCase):
         loss.backward()
         self.assertIsNotNone(model.memory_init.grad)
         self.assertIsNotNone(model.embed.weight.grad)
+        self.assertFalse(model.blocks[0].attention.fope.query_sin_coef.requires_grad)
         with self.assertRaises(ValueError):
             model(torch.zeros(1, 65, dtype=torch.long))
 
@@ -64,7 +67,9 @@ class ModelTests(unittest.TestCase):
         model = FarmSLM(load_project().model)
         model.load_safetensors(saved)
         self.assertEqual(model.lm_head.weight.data_ptr(), model.embed.weight.data_ptr())
-        self.assertIn("context_window=500000", architecture_report(model))
+        report = architecture_report(model)
+        self.assertIn("context_window=500000", report)
+        self.assertIn("position_embedding=fope", report)
 
     def test_the_decoder_sees_the_map_chip(self) -> None:
         project = load_project()
@@ -79,6 +84,8 @@ class ModelTests(unittest.TestCase):
             segment_length=16,
             memory_slots=4,
             rope_theta=1_000_000.0,
+            fope_floor_length=64,
+            fope_init_gain=0.1,
             rms_norm_eps=1e-6,
             image_channels=3,
             patch_size=16,

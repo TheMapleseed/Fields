@@ -10,6 +10,7 @@ full document.
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 
 import torch
@@ -43,33 +44,113 @@ def memory_causal_mask(tokens: int, memory: int, device: torch.device) -> torch.
     return allowed
 
 
-def apply_rope(
-    query: torch.Tensor,
-    key: torch.Tensor,
-    positions: torch.Tensor,
-    theta: float,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    head_dim = query.shape[-1]
-    half = head_dim // 2
-    exponents = torch.arange(0, half, device=query.device, dtype=torch.float32) / half
-    inv_freq = 1.0 / (theta ** exponents)
-    angles = torch.outer(positions.to(dtype=torch.float32), inv_freq)
-    cos = torch.cat((angles.cos(), angles.cos()), dim=-1)[None, None, :, :]
-    sin = torch.cat((angles.sin(), angles.sin()), dim=-1)[None, None, :, :]
-
-    def twist(tensor: torch.Tensor) -> torch.Tensor:
-        values = tensor.float()
-        first, second = values[..., :half], values[..., half:]
-        rotated = torch.cat((-second, first), dim=-1)
-        return values * cos + rotated * sin
-
-    return twist(query).type_as(query), twist(key).type_as(key)
-
-
 def repeat_kv(tensor: torch.Tensor, repeats: int) -> torch.Tensor:
     if repeats == 1:
         return tensor
     return tensor.repeat_interleave(repeats, dim=1)
+
+
+class FourierPositionEmbedding(nn.Module):
+    """FoPE: Fourier series over RoPE frequencies, with under-trained bands zeroed.
+
+    Hua et al., ICML 2025. Each kept frequency is mixed by a frozen coefficient
+    matrix so one head dimension carries a short Fourier series. Frequencies
+    below 2π / fope_floor_length are dropped and the spare head dimensions stay
+    at the identity rotation.
+    """
+
+    def __init__(self, config: FarmSLMConfig) -> None:
+        super().__init__()
+        self.head_dim = config.head_dim
+        self.theta = config.rope_theta
+        self.floor_length = config.fope_floor_length
+        half = config.head_dim // 2
+        inv_freq = _rope_inv_freq(half, config.rope_theta)
+        floor = 2.0 * math.pi / float(config.fope_floor_length)
+        kept = inv_freq[inv_freq >= floor]
+        if kept.numel() == 0:
+            kept = inv_freq[:1]
+        self.register_buffer("inv_freq", kept, persistent=True)
+        input_dim = int(kept.numel())
+        output_dim = input_dim if input_dim <= half // 2 else max(1, half // 2)
+        self.output_dim = output_dim
+        self.query_sin_coef = nn.Parameter(
+            _fope_coef(config.num_attention_heads, input_dim, output_dim, config.fope_init_gain),
+            requires_grad=False,
+        )
+        self.query_cos_coef = nn.Parameter(
+            _fope_coef(config.num_attention_heads, input_dim, output_dim, config.fope_init_gain),
+            requires_grad=False,
+        )
+        self.key_sin_coef = nn.Parameter(
+            _fope_coef(config.num_key_value_heads, input_dim, output_dim, config.fope_init_gain),
+            requires_grad=False,
+        )
+        self.key_cos_coef = nn.Parameter(
+            _fope_coef(config.num_key_value_heads, input_dim, output_dim, config.fope_init_gain),
+            requires_grad=False,
+        )
+
+    def forward(
+        self,
+        query: torch.Tensor,
+        key: torch.Tensor,
+        positions: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        angles = torch.einsum(
+            "t,d->td",
+            positions.to(dtype=torch.float32),
+            self.inv_freq.to(dtype=torch.float32),
+        )
+        pos_sin = angles.sin()
+        pos_cos = angles.cos()
+        query_sin, query_cos = self._series(pos_sin, pos_cos, self.query_sin_coef, self.query_cos_coef)
+        key_sin, key_cos = self._series(pos_sin, pos_cos, self.key_sin_coef, self.key_cos_coef)
+        return _twist(query, query_sin, query_cos), _twist(key, key_sin, key_cos)
+
+    def _series(
+        self,
+        pos_sin: torch.Tensor,
+        pos_cos: torch.Tensor,
+        sin_coef: torch.Tensor,
+        cos_coef: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        half = self.head_dim // 2
+        sin_weight = sin_coef / sin_coef.sum(dim=-2, keepdim=True).clamp_min(1e-6)
+        cos_weight = cos_coef / cos_coef.sum(dim=-2, keepdim=True).clamp_min(1e-6)
+        # pos: [time, freq]  coef: [heads, freq, series] -> [heads, time, series]
+        series_sin = torch.einsum("td,hds->hts", pos_sin, sin_weight)
+        series_cos = torch.einsum("td,hds->hts", pos_cos, cos_weight)
+        pad = half - series_sin.shape[-1]
+        if pad > 0:
+            # Spare dimensions stay at the identity rotation (cos=1, sin=0).
+            series_sin = F.pad(series_sin, (0, pad), value=0.0)
+            series_cos = F.pad(series_cos, (0, pad), value=1.0)
+        sin = torch.cat((series_sin, series_sin), dim=-1)[None, :, :, :]
+        cos = torch.cat((series_cos, series_cos), dim=-1)[None, :, :, :]
+        return sin, cos
+
+
+def _rope_inv_freq(half: int, theta: float) -> torch.Tensor:
+    exponents = torch.arange(0, half, dtype=torch.float32) / half
+    return 1.0 / (theta ** exponents)
+
+
+def _fope_coef(heads: int, input_dim: int, output_dim: int, gain: float) -> torch.Tensor:
+    weight = torch.empty(heads, input_dim, output_dim)
+    nn.init.xavier_normal_(weight, gain=gain)
+    eye = torch.zeros(input_dim, output_dim)
+    diag = min(input_dim, output_dim)
+    eye[:diag, :diag] = torch.eye(diag)
+    return weight + eye
+
+
+def _twist(tensor: torch.Tensor, sin: torch.Tensor, cos: torch.Tensor) -> torch.Tensor:
+    half = tensor.shape[-1] // 2
+    values = tensor.float()
+    first, second = values[..., :half], values[..., half:]
+    rotated = torch.cat((-second, first), dim=-1)
+    return (values * cos + rotated * sin).type_as(tensor)
 
 
 class GroupedQueryAttention(nn.Module):
@@ -79,12 +160,12 @@ class GroupedQueryAttention(nn.Module):
         self.kv_heads = config.num_key_value_heads
         self.head_dim = config.head_dim
         self.repeats = self.heads // self.kv_heads
-        self.theta = config.rope_theta
         hidden = config.hidden_size
         self.q = nn.Linear(hidden, self.heads * self.head_dim, bias=False)
         self.k = nn.Linear(hidden, self.kv_heads * self.head_dim, bias=False)
         self.v = nn.Linear(hidden, self.kv_heads * self.head_dim, bias=False)
         self.o = nn.Linear(self.heads * self.head_dim, hidden, bias=False)
+        self.fope = FourierPositionEmbedding(config)
 
     def forward(
         self,
@@ -97,7 +178,7 @@ class GroupedQueryAttention(nn.Module):
         query = _heads(self.q(hidden), batch, tokens, self.heads, self.head_dim)
         key = _heads(self.k(hidden), batch, tokens, self.kv_heads, self.head_dim)
         value = _heads(self.v(hidden), batch, tokens, self.kv_heads, self.head_dim)
-        query, key = apply_rope(query, key, positions, self.theta)
+        query, key = self.fope(query, key, positions)
         memory_key = _heads(self.k(memory), batch, memory_slots, self.kv_heads, self.head_dim)
         memory_value = _heads(self.v(memory), batch, memory_slots, self.kv_heads, self.head_dim)
         key = torch.cat((memory_key, key), dim=2)
@@ -375,6 +456,9 @@ class FarmSLM(nn.Module):
                 "image_channels": str(self.config.image_channels),
                 "patch_size": str(self.config.patch_size),
                 "image_size": str(self.config.image_size),
+                "position_embedding": "fope",
+                "fope_floor_length": str(self.config.fope_floor_length),
+                "fope_init_gain": str(self.config.fope_init_gain),
             },
         )
 
@@ -391,6 +475,10 @@ class FarmSLM(nn.Module):
             "patch_size"
         ) != str(self.config.patch_size):
             raise ValueError("safetensors file does not match this vision encoder")
+        if metadata.get("position_embedding") != "fope":
+            raise ValueError("safetensors file does not use FoPE")
+        if metadata.get("fope_floor_length") != str(self.config.fope_floor_length):
+            raise ValueError("safetensors file does not match this FoPE floor length")
         incompatible = self.load_state_dict(state, strict=False)
         if incompatible.unexpected_keys:
             raise ValueError(f"unexpected weights: {incompatible.unexpected_keys}")
@@ -424,7 +512,10 @@ def architecture_report(model: FarmSLM) -> str:
         f"image_channels={config.image_channels}",
         f"patch_size={config.patch_size}",
         f"image_size={config.image_size}",
+        "position_embedding=fope",
         f"rope_theta={config.rope_theta}",
+        f"fope_floor_length={config.fope_floor_length}",
+        f"fope_init_gain={config.fope_init_gain}",
         f"parameters={params}",
         f"carried_memory_fp16_bytes={memory_bytes}",
         f"segment_attention_scores_fp16_bytes={segment_scores}",

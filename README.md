@@ -12,7 +12,7 @@ Repository: [TheMapleseed/Fields](https://github.com/TheMapleseed/Fields)
 
 Fields is an early sketch of a small language model for farming.
 
-The idea is a program that can read a long pile of notes and still keep the thread. A weather write-up, a soil test, a page of farm vocabulary, and a simple explanation of how water moves through soil can sit in one reading. The reading window is 500,000 tokens. The model reads that window in segments and carries a fixed bank of memory from one segment to the next, so the full window is never one attention matrix.
+The idea is a program that can read a long pile of notes and still keep the thread. A weather write-up, a soil test, a page of farm vocabulary, and a simple explanation of how water moves through soil can sit in one reading. The reading window is 500,000 tokens. The model reads that window in segments and carries a fixed bank of memory from one segment to the next, so the full window is never one attention matrix. Positions use FoPE (Fourier Position Embedding): each head mixes a short Fourier series of RoPE frequencies, and bands that cannot finish a cycle inside the training floor length are held at the identity rotation.
 
 It is aimed at five kinds of language:
 
@@ -34,24 +34,23 @@ Weights are safetensors. That is the only weight format this project writes.
 
 `farm_slm.kdl` stores them at `artifacts/farm_slm.safetensors`. The embedding and the output head share one matrix, so that matrix is stored once and tied again when the file is loaded. The file header records the context window, the five domains, and the vision settings: 3 channels, 16-pixel patches, and 256-pixel chips. A file that does not match those settings is refused.
 
-The practice file from the short sample run is float32. `artifacts/` and `*.safetensors` are gitignored, so the weight file stays on the machine that trained it and is not part of this repository.
+Training also writes a resume checkpoint under `artifacts/checkpoints/`: `model.safetensors` and `optimizer.safetensors`. With `train.resume 1`, a later run continues from the saved step until `train.steps` is reached. Raise `train.steps` to go further. The practice files are float32. `artifacts/` and `*.safetensors` are gitignored, so those files stay on the machine that trained them and are not part of this repository.
 
 ## What is in place
 
-- The model, the byte tokenizer, and the five domain tokens are configured in `farm_slm.kdl`.
-- The vision encoder reads a map chip during the forward pass.
-- Map chips are cut from georeferenced sheets, and the labeled pixel is checked against the sheet's coordinate system.
+- The model, the byte tokenizer, and the five domain tokens are configured in `farm_slm.kdl`. Positions use FoPE.
+- The vision encoder reads a map chip during the forward pass. Training loads a chip when the JSONL record names one.
+- Map chips are cut from georeferenced sheets, and the labeled pixel is checked against the sheet's coordinate system. Map examples enter training as physics-domain text.
 - Soil loss is calculated with RUSLE, and the cover and support pair with the lowest loss is selected from `farm_slm.kdl`.
-- `sources.kdl` lists the public catalogs intended for later collection. Each record keeps the license stated by the publisher.
-- The GitHub collector can save text as JSONL under `data/corpus/` once it is given queries.
-- A training run writes the safetensors file above.
+- `sources.kdl` lists the public catalogs intended for later collection, including global crops and farming techniques (Wikipedia, Wikidata, FAO ECOCROP, Crop Ontology, and CGIAR centers). Each record keeps the license stated by the publisher. Wikipedia text is CC BY-SA 4.0.
+- The GitHub collector can save text as JSONL under `data/corpus/` once it is given queries. Catalog labels such as soil or spatial fold into the five model domains. Multiline text is flattened.
+- Training shuffles examples, can hold out a region, writes `artifacts/farm_slm.safetensors`, and resumes from `artifacts/checkpoints/`.
+- `python -m farm_slm.generate` continues a prompt from the saved weights, with an optional map chip.
 
 ## Still open
 
-`sources.kdl` is a catalog only. The collector does not read it, and the GitHub query slots are empty, so there is no real corpus yet.
+`sources.kdl` is a catalog only. The collector does not read it, and the GitHub query slots are empty, so there is no real corpus yet. Wikipedia and the CGIAR crop sources are listed; nothing from those dumps has been downloaded.
 
-Training falls back to a short primer, five steps, and does not pass a map chip. The encoder can see an image. This checkpoint has not learned from one.
+Until that corpus exists, training still falls back to a short primer. The practice checkpoint has not learned from map chips or regional sources.
 
-There is no generate step. The code can score the next token and save weights. It cannot yet take a prompt, or a chip, and write an answer.
-
-What belongs next is a collector that fills `data/corpus/` from the catalog and keeps each record's license, a training run on those records and any chip that came with them, and a generate path that loads this same safetensors file. A small set of held-out notes, plus one chip whose labeled pixel is already known, is what would show whether that run learned anything. A second safetensors file for the optimizer state is what would let a longer run resume.
+What belongs next is a collector that fills `data/corpus/` from the catalog and keeps each record's license, then a longer training run on those records and their chips.

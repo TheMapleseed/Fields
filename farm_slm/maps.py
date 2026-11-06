@@ -93,9 +93,11 @@ def write_coordinate_example(
         raise MapSheetError("the chip geotransform does not place the coordinate on the labeled pixel")
 
     record: dict[str, object] = {
-        "domain": "spatial",
+        "domain": "physics",
         "kind": "topographic-coordinate",
         "license": license_id.strip(),
+        "region": "unspecified",
+        "units": "unspecified",
         "sheet": str(sheet),
         "chip": chip_name,
         "crs": str(located["crs"]),

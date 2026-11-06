@@ -30,6 +30,8 @@ class FarmSLMConfig:
     segment_length: int
     memory_slots: int
     rope_theta: float
+    fope_floor_length: int
+    fope_init_gain: float
     rms_norm_eps: float
     image_channels: int
     patch_size: int
@@ -46,8 +48,13 @@ class FarmSLMConfig:
         _positive("max_position_embeddings", self.max_position_embeddings)
         _positive("segment_length", self.segment_length)
         _positive("memory_slots", self.memory_slots)
+        _positive("fope_floor_length", self.fope_floor_length)
         if self.rope_theta <= 0 or self.rms_norm_eps <= 0:
             raise ValueError("rope_theta and rms_norm_eps must be positive")
+        if self.fope_init_gain <= 0:
+            raise ValueError("fope_init_gain must be positive")
+        if self.fope_floor_length > self.max_position_embeddings:
+            raise ValueError("fope_floor_length cannot exceed the context window")
         if self.hidden_size % self.num_attention_heads != 0:
             raise ValueError("hidden_size must divide evenly into attention heads")
         if self.num_attention_heads % self.num_key_value_heads != 0:
@@ -109,6 +116,10 @@ class TrainSettings:
     grad_clip: float
     seed: int
     max_train_tokens: int
+    checkpoint_dir: str
+    checkpoint_every: int
+    resume: bool
+    hold_out_region: str
 
     def __post_init__(self) -> None:
         if self.learning_rate <= 0 or self.grad_clip <= 0:
@@ -117,8 +128,13 @@ class TrainSettings:
             raise ValueError("weight_decay cannot be negative")
         _positive("steps", self.steps)
         _positive("max_train_tokens", self.max_train_tokens)
+        _positive("checkpoint_every", self.checkpoint_every)
         if self.seed < 0:
             raise ValueError("seed cannot be negative")
+        if Path(self.checkpoint_dir).is_absolute() or ".." in Path(self.checkpoint_dir).parts:
+            raise ValueError("checkpoint_dir must stay inside the project")
+        if not self.hold_out_region:
+            raise ValueError("hold_out_region must be a place name or none")
 
 
 @dataclass(frozen=True)
@@ -272,6 +288,8 @@ def load_project(path: Path | None = None) -> ProjectConfig:
         segment_length=_as_int(_number(model_node, "segment_length")),
         memory_slots=_as_int(_number(model_node, "memory_slots")),
         rope_theta=float(_number(model_node, "rope_theta")),
+        fope_floor_length=_as_int(_number(model_node, "fope_floor_length")),
+        fope_init_gain=float(_number(model_node, "fope_init_gain")),
         rms_norm_eps=float(_number(model_node, "rms_norm_eps")),
         image_channels=_as_int(_number(model_node, "image_channels")),
         patch_size=_as_int(_number(model_node, "patch_size")),
@@ -294,6 +312,10 @@ def load_project(path: Path | None = None) -> ProjectConfig:
         grad_clip=float(_number(train_node, "grad_clip")),
         seed=_as_int(_number(train_node, "seed")),
         max_train_tokens=_as_int(_number(train_node, "max_train_tokens")),
+        checkpoint_dir=_string_arg(_child(train_node, "checkpoint_dir")),
+        checkpoint_every=_as_int(_number(train_node, "checkpoint_every")),
+        resume=_as_bool(_number(train_node, "resume")),
+        hold_out_region=_string_arg(_child(train_node, "hold_out_region")),
     )
     weights_node = _one(nodes, "weights")
     return ProjectConfig(
@@ -336,6 +358,15 @@ def _as_int(value: int | float) -> int:
     if isinstance(value, float) and not value.is_integer():
         raise ValueError("expected an integer")
     return int(value)
+
+
+def _as_bool(value: int | float) -> bool:
+    if isinstance(value, float) and not value.is_integer():
+        raise ValueError("expected 0 or 1")
+    number = int(value)
+    if number not in {0, 1}:
+        raise ValueError("expected 0 or 1")
+    return bool(number)
 
 
 def _positive(name: str, value: int) -> None:
